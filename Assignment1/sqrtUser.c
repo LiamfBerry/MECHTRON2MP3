@@ -6,8 +6,8 @@ double sqrtUser(double number, int n) {
     double root = number/2;
     double precision = 0.9;
 
-    if (n>=16) {
-        printf("Precision is too high, choose something between 1-15\n");
+    if (n>16) {
+        printf("Precision is too high, choose something between 1-16\n");
         return 0;
     }
 
