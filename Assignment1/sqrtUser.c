@@ -4,7 +4,12 @@
 double sqrtUser(double number, int n) {
 
     double root = number/2;
-    double precision = 0.1;
+    double precision = 0.9;
+
+    if (n>=16) {
+        printf("Precision is too high, choose something between 1-15\n");
+        return 0;
+    }
 
     for (int i=0; i<n; i++) {
         precision /= 10;
@@ -12,7 +17,7 @@ double sqrtUser(double number, int n) {
 
     while (true) {
         
-        if (root*root-number < precision || number==0) {
+        if ((root*root-number < precision && root*root-number >=0) || number==0) {
             break;
         }
         else if (number<0) {
