@@ -18,7 +18,7 @@ double sqrtUser(double number, int n) {
 
     while (true) {
         
-       if (root*root-number < precision && root*root-number >=0 || number==0) {
+       if ((root*root-number < precision && root*root-number >=0) || number==0) {
             break;
         }
         else if (number<0) {
