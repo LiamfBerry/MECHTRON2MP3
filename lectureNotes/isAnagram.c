@@ -31,12 +31,7 @@ int main() {
     char s[] = "anagram"; 
     char t[] = "nagaram"; 
 
-    if (isAnagram(s,t)) {
-        printf("true\n");
-    }
-    else {
-        printf("false\n");
-    }
+    printf("%s\n", isAnagram(s,t)? "true":"false");
     
 
 }
