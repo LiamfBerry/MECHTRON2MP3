@@ -15,7 +15,6 @@ int reverseNumber(int num) {
     return reverse;
 
 }
-
 int main() {
     int num = 0;
     scanf("%d",&num);
