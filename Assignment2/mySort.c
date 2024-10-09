@@ -67,7 +67,7 @@ void mergeSort(int arr[], int n) {
 */
 
 void heapSort(int arr[], int n) {
-    
+
 }
 
 // CODE: implement the algorithms for Insertion Sort, Merge Sort, Heap Sort, Counting Sort
