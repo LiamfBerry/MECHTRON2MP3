@@ -154,6 +154,9 @@ void countingSort(int arr[], int n) {
         printf("Error");
         return;
     }
+    for (int i=0;i<size;i++) {
+        countArray[i] = 0;
+    }
 
     //Assign each index in new array to instances of value in old array
     for (int i=0;i<n;i++) {
@@ -171,6 +174,9 @@ void countingSort(int arr[], int n) {
     if (sortedArray == NULL) {
         printf("Error");
         return;
+    }
+    for (int i=0;i<n;i++) {
+        sortedArray[i] = 0;
     }
 
     //Traverse input array from last element to preserve order then track that index to the 
