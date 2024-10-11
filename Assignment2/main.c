@@ -21,6 +21,16 @@ int main() {
     printf("Bubble sorted array: ");
     printArray(testArr, n);
 
+    //Merge Sort
+    memcpy(testArr, arr, n * sizeof(int));
+    int l = 0;
+    int r = n-1;
+    printf("Original array: ");
+    printArray(testArr, n);
+    mergeSort(testArr, l, r);
+    printf("Merge sorted array: ");
+    printArray(testArr, n);
+
     //Insertion Sort
     memcpy(testArr, arr, n * sizeof(int));
     printf("Original array: ");
@@ -28,6 +38,24 @@ int main() {
     insertionSort(testArr, n);
     printf("Insertion sorted array: ");
     printArray(testArr, n);
+
+    //Heap Sort
+    memcpy(testArr, arr, n * sizeof(int));
+    printf("Original array: ");
+    printArray(testArr, n);
+    heapSort(testArr, n);
+    printf("Heap sorted array: ");
+    printArray(testArr, n);
+
+    //Counting Sort
+    memcpy(testArr, arr, n * sizeof(int));
+    printf("Original array: ");
+    printArray(testArr, n);
+    countingSort(testArr, n);
+    printf("Counting sorted array: ");
+    printArray(testArr, n);
+
+   
 
 
     // CODE: do the same test cases for Insertion Sort, Merge Sort, Heap Sort, Counting Sort
