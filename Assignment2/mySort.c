@@ -22,19 +22,18 @@ void bubbleSort(int arr[], int n) {
 }
 
 void insertionSort(int arr[], int n) {
-    for (int i = 0; i < n-1; i++) { //checks element
-        for (int j = i-1; j >= 0; j--) { 
-            if (arr[i] < arr[j]) { //compares to sorted list 
-                swap(&arr[i], &arr[j]);
-            }
+    for (int i = 1; i < n; i++) { //checks element
+        int j = i-1; //previous element 
+        int check = arr[i];
+        while (j>=0 && arr[j] > check){ 
+            //Move arr[j] up an index then check again 
+            arr[j+1]=arr[j];
+            j--; //Ensures j checks each element previous to it and no elements are lost
         }
+        arr[j+1] = check; //Update checked element to next
     }
 }
 
-
-//Fix: Runaway code + needs to dereference pointer to array in each 
-//sorted element and reassign. Do this when merging lists with swap
-//need to redefine function to use l and r
 void merge(int arr[], int l, int m, int r) {
 
     int sizeLeft = m-l+1;
@@ -95,10 +94,14 @@ void mergeSort(int arr[], int l, int r) {
 }
 
 void maxHeap(int arr[], int n, int i) {
-    int max = i;
-    int leftChild = 2*i + 1;
+
+    int max = i; //max is current node
+
+    //defines children of node in heap
+    int leftChild = 2*i + 1; 
     int rightChild = 2*i + 2;
 
+    //Checks if children are greater than root then updates max
     if (leftChild < n && arr[leftChild] > arr[max]) {
         max = leftChild;
     }
@@ -126,7 +129,7 @@ void heapSort(int arr[], int n) {
     for (int i = n-1; i>0; i--) {
         swap(&arr[0],&arr[i]);
 
-        //Reheapifies reduced(unsorted heap)
+        //Reheapifies reduced (unsorted heap)
         maxHeap(arr,i,0);
     }
 

@@ -8,7 +8,7 @@ void printArray(int arr[], int n);
 
 // Test the sorting algorithms
 int main() {
-    int arr[] = {64, -134, -5, 0, 25, 12, 22, 11, 90};
+    int arr[] = {64, -134, -5, 0, 25, 12, 22, 11, 90,-34563,36,1345,6234,-34513};
     int n = sizeof(arr) / sizeof(arr[0]);
     
     int testArr[n];
