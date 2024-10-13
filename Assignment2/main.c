@@ -14,12 +14,12 @@ int main() {
     int testArr[n];
     
     // Bubble Sort
-    memcpy(testArr, arr, n * sizeof(int));
+    memcpy(testArr, arr, n * sizeof(int)); //Copies array to testarray to make sure we can resort from the origional array each time
     printf("Original array: ");
-    printArray(testArr, n);
-    bubbleSort(testArr, n);
+    printArray(testArr, n); //Calls print array function for loop
+    bubbleSort(testArr, n); //Calls function created in mySort.c
     printf("Bubble sorted array: ");
-    printArray(testArr, n);
+    printArray(testArr, n); //Prints sorted array
 
     //Merge Sort
     memcpy(testArr, arr, n * sizeof(int));
