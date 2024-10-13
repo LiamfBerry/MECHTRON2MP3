@@ -55,9 +55,6 @@ int main() {
     printf("Counting sorted array: ");
     printArray(testArr, n);
 
-   
-
-
     // CODE: do the same test cases for Insertion Sort, Merge Sort, Heap Sort, Counting Sort
     // You will submit main.c, and your project will be marked based on main.c as well
     

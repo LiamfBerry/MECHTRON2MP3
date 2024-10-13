@@ -6,6 +6,8 @@
 
 
 void swap(int *x, int *y) {
+
+    //dereferences 
     int temp = *x;
     *x = *y;
     *y = temp;
@@ -157,6 +159,7 @@ void countingSort(int arr[], int n) {
         printf("Error");
         return;
     }
+    
     for (int i=0;i<size;i++) {
         countArray[i] = 0;
     }
