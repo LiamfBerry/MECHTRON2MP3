@@ -8,17 +8,17 @@
 void swap(int *x, int *y) {
 
     //dereferences 
-    int temp = *x;
-    *x = *y;
-    *y = temp;
+    int temp = *x; //Assign temporary int to dereferenced array pointer
+    *x = *y; //Dereference pointer and change value to other dereferenced pointer
+    *y = temp; //Assign other dereferenced pointer to temporary value
 }
 
 // Bubble Sort
 void bubbleSort(int arr[], int n) {
-    for (int i = 0; i < n - 1; i++) {
-        for (int j = 0; j < n - i - 1; j++) {
+    for (int i = 0; i < n - 1; i++) { //iterates through array
+        for (int j = 0; j < n - i - 1; j++) { //Compares adjacent elements up to current index
             if (arr[j] > arr[j + 1])
-                swap(&arr[j], &arr[j + 1]);
+                swap(&arr[j], &arr[j + 1]); //Swaps adjacent elements if smaller index has a larger value
         }
     }
 }
