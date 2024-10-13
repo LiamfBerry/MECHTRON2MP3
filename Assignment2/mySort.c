@@ -38,8 +38,8 @@ void insertionSort(int arr[], int n) {
 
 void merge(int arr[], int l, int m, int r) {
 
-    int sizeLeft = m-l+1;
-    int sizeRight = r-m;
+    int sizeLeft = m-l+1; //left index to middle 
+    int sizeRight = r-m; //middle to right index
     int arrayLeft[sizeLeft], arrayRight[sizeRight]; //split arrays
 
     //fills arrays which respective haves of each list 
@@ -66,7 +66,8 @@ void merge(int arr[], int l, int m, int r) {
         k++;
     }
 
-    //on last iteration of previous while loop one element will be left behind so we assume that is the greatest value and populate it to the final index
+    //on last iteration of previous while loop one element will be left behind 
+    //so we assume that is the greatest value and populate it to the final index
     while ( i < sizeLeft) {
         arr[k] = arrayLeft[i];
         i++;
@@ -87,9 +88,11 @@ void mergeSort(int arr[], int l, int r) {
 
         int m = (l+r)/2; //middle index
 
-        mergeSort(arr, l, m);
+        //Recursively splits halves into smaller and smaller sub arrays
+        mergeSort(arr, l, m); 
         mergeSort(arr, m+1,r);
 
+        //Merge sub arrays into sorted groups
         merge(arr,l,m,r);
     }
 
@@ -123,12 +126,12 @@ void maxHeap(int arr[], int n, int i) {
 void heapSort(int arr[], int n) {
 
     //Builds max heap
-    for (int i = n/2-1; i>=0; i--) {
+    for (int i = n/2-1; i>=0; i--) { //i=n/2-1 ensures we start at the deepest parent layer and move upwards until we are at the root
         maxHeap(arr, n, i);
     }
 
     //smallest element to root
-    for (int i = n-1; i>0; i--) {
+    for (int i = n-1; i>0; i--) { //start from end and go to start 
         swap(&arr[0],&arr[i]);
 
         //Reheapifies reduced (unsorted heap)
@@ -139,6 +142,9 @@ void heapSort(int arr[], int n) {
 
 
 void countingSort(int arr[], int n) {
+
+    //ensures smallest and largest value exist in list 
+    //Predefined max and mins are subject to not being large or small enough
     int max = arr[0];
     int min = arr[0];
 
@@ -152,14 +158,16 @@ void countingSort(int arr[], int n) {
         }
     }
 
-    //Create array of size max-min+1 (shifts negative numbers to 0 to handle negative indecies)
+    //Create array of size max-min+1 (shifts negative numbers to 0 to handle negative indecies: normalizes array)
     int size = max-min+1;
     int* countArray = (int*)malloc(size*sizeof(int));
+
+    //Ensures memory allocation is successful and pointer is not null
     if (countArray == NULL) {
         printf("Error");
         return;
     }
-    
+    //Initialize array with zeros
     for (int i=0;i<size;i++) {
         countArray[i] = 0;
     }
@@ -177,10 +185,14 @@ void countingSort(int arr[], int n) {
 
     //Initialize an array to sort into
     int* sortedArray = (int*)malloc(n*sizeof(int));
+
+    //Ensure memory allocation is successful
     if (sortedArray == NULL) {
         printf("Error");
         return;
     }
+
+    //Initialize array
     for (int i=0;i<n;i++) {
         sortedArray[i] = 0;
     }
@@ -189,7 +201,7 @@ void countingSort(int arr[], int n) {
     //cumulative sum and subtract 1 to find index of where value should be assigned
     for (int i=n-1; i>=0; i--) {
         sortedArray[countArray[arr[i]-min]-1]=arr[i];
-        countArray[arr[i]-min]--;
+        countArray[arr[i]-min]--; //Ensures duplicate values won't populate the same location twice
     }
 
     //Replace origional array with sorted array
@@ -201,5 +213,3 @@ void countingSort(int arr[], int n) {
     free(countArray);
     free(sortedArray);
 }
-
-// CODE: implement the algorithms for Insertion Sort, Merge Sort, Heap Sort, Counting Sort
