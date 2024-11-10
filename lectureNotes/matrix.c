@@ -12,19 +12,19 @@ void matrixMultiply(int m, int n, double A[m][n], double B[n][m], double **C) {
     }
 }
 
-int allocateMem(int m) {
-    int **C = (int **)malloc(m*sizeof(int *));
+double **allocateMem(int m) {
+    double **C = (double **)malloc(m*sizeof(double *));
     for (int i=0; i<m; i++) {
-        C[i] = (int *)malloc(m*sizeof(int));
+        C[i] = (double *)malloc(m*sizeof(double));
     }
 
     return C;
 }
 
-void printMatrix(int rows, int cols, int **matrix) {
+void printMatrix(int rows, int cols, double **C) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
-            printf("%d ", matrix[i][j]);
+            printf("%8.4lf ", C[i][j]);
         }
         printf("\n");
     }
@@ -33,10 +33,10 @@ void printMatrix(int rows, int cols, int **matrix) {
 
 int main() {
     int m = 2, n = 3;
-    int A[2][3] = {{1,2,3},{4,5,6}};
-    int B[3][2] = {{7,8}, {9, 10}, {11, 12}};
+    double A[2][3] = {{1,2,3},{4,5,6}};
+    double B[3][2] = {{7,8}, {9, 10}, {11, 12}};
 
-    int **C = allocateMem(m);
+    double **C = allocateMem(m);
 
     matrixMultiply(m,n,A,B,C);
 
