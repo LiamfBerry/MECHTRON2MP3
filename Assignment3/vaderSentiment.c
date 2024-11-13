@@ -25,7 +25,7 @@ int hash(char *word) {
     int len = strlen(word);
 
     for (int i = 0; i < len; i++) { 
-        key += (word[i]*i); //Ensures anagrams don't occupy the same key (avoids collisions)
+        key += ((unsigned char)(word[i])*i); //Ensures anagrams don't occupy the same key (avoids collisions)
         
     }
     return key % TABLE_SIZE; //Normalize to table size
@@ -94,6 +94,7 @@ void printTable() {
 void readVader() {
 
     char word[256]; //array to store word
+    char line[512]; //Store each line 
     float value1 = 0; //the sentiment score
     float value2 = 0;
     int intArray[10];
@@ -107,14 +108,14 @@ void readVader() {
     }
 
     //Scan through each line and look for the charcters in the word and the floating point integer after the tabspace as well as the standard deviation and the list values
-    while (fscanf(vader, "%255[^\t]\t%f\t%f\t[%d, %d, %d, %d, %d, %d, %d, %d, %d, %d]%*[^\n]", 
-        word, &value1, &value2,
-        &intArray[0],&intArray[1],&intArray[2],&intArray[3],&intArray[4],
-        &intArray[5],&intArray[6],&intArray[7],&intArray[8],&intArray[9]) == 13) { //Ensures two values are received from each lne
-        //printf("Inserting word: '%s' with value: %f\n", word, value1); //For debugging
-        insert (word, value1, value2, intArray);
-        fgetc(vader); //Moves past newline character
-
+    while (fgets(line, sizeof(line), vader)) {
+        if (sscanf(line, "%255s %f %f [%d, %d, %d, %d, %d, %d, %d, %d, %d, %d]", 
+            word, &value1, &value2,
+            &intArray[0],&intArray[1],&intArray[2],&intArray[3],&intArray[4],
+            &intArray[5],&intArray[6],&intArray[7],&intArray[8],&intArray[9]) == 13) {//Ensures two values are received from each lne
+            printf("Inserting word: '%s' with value: %f\n", word, value1); //For debugging
+            insert (word, value1, value2, intArray);
+        }
     }
     //close file when done
     fclose(vader);
@@ -147,10 +148,11 @@ float lookup(char *word) {
 
 
 //NOTE: This function should only be run if we already know the word is fully capitalized so we have to impliment a check for it
+//non alpha numeric character is always caps and not so add flag for this
 float checkCaps(char *word) {
     int len = strlen(word);
 
-    int amplifier = 1.5; //flag to check if it's all capitals
+    float amplifier = 1.5; //flag to check if it's all capitals
 
     //If it isn't all then it's not intensified
     for (int i = 0; i < len; i++) {
@@ -187,12 +189,12 @@ float intensifiers(char *word) {
 
 float negations(char *word) {
 
-    char *negations[] = {"not", "isn't", "doesn't", "wasn't", "shouldn't", "won't", "cannot", "can't", "nor", "neither", "without", "lack", "missing"};
+    char *negations[] = {"not", "isn't", "doesn't", "wasn't", "shouldn't", "won't", "cannot", "can't", "nor", "neither", "without", "lack", "missing", "don't"};
 
     float negation = -0.5;
 
     //Negations string compare 
-    for (int i = 0; i < 13; i++) {
+    for (int i = 0; i < 14; i++) {
         if (strcasecmp(word, negations[i]) == 0) {
             return negation;
         }
@@ -219,7 +221,7 @@ float sentimentCalculation(char *sentence) {
 
     float amplifier = 1;
 
-    int punctuation_count = 0;
+    float punctuation_count = 0;
     float punctuation_boost = 0.292;
 
 
@@ -231,30 +233,29 @@ float sentimentCalculation(char *sentence) {
             
         }  
         //Handels punctuation boost from exclimation points
-        //else if (sentence[i] == '!') {
-            //punctuation_count++; //Is this meant to be positive for positive and negative for negative or just always positive?
-        //}
+        else if (sentence[i] == '!') {
+            punctuation_count++; //Is this meant to be positive for positive and negative for negative or just always positive?
+        }
         else {
             if (temp_index > 0) {
                 
                 word_temp[temp_index] = '\0'; //Null-terminates the word
                 word_count++; //Increase word count
 
-                sentiment += amplifier*checkCaps(word_temp)*lookup(word_temp) + punctuation_count*punctuation_boost; //Add to sentiment 
-                amplifier = intensifiers(word_temp)*negations(word_temp); // Amplifer is set to the current word but won't be applied until the next word. Since amplifers don't appear in the lexicon this doesn't conflict
-                
-                memset(word_temp, 0, sizeof(word_temp)); //Reset temporary word holder
-                temp_index = 0; //Reset temporary index for word holder
-                punctuation_count = 0; //reset cause exclimations can be on multiple words 
-                
+                sentiment += amplifier * checkCaps(word_temp) * lookup(word_temp) + punctuation_count * punctuation_boost; //Add to sentiment 
+                amplifier = intensifiers(word_temp) * negations(word_temp); // Amplifer is set to the current word but won't be applied until the next word. Since amplifers don't appear in the lexicon this doesn't conflict
+                 
             }
+            memset(word_temp, 0, sizeof(word_temp)); //Reset temporary word holder
+            temp_index = 0; //Reset temporary index for word holder
+            punctuation_count = 0; //reset cause exclimations can be on multiple words
             
         } 
     }
     //Checks for last word which is missed in loop
     if (temp_index > 0) {
         word_temp[temp_index] = '\0'; //Null-terminates the word
-        sentiment += amplifier * lookup(word_temp);
+        sentiment += amplifier * checkCaps(word_temp) * lookup(word_temp) + punctuation_count*punctuation_boost;
     }
 
     float compound = sentiment / sqrt(pow(sentiment, 2) + alpha);
@@ -270,9 +271,21 @@ int main() {
 
     readVader();
 
+    //printTable();
+
     char test[256] = "VADER is very smart, handsome, and funny.";
 
-    printf("%f\n", sentimentCalculation(test));
+    //printf("%f\n", sentimentCalculation(test));
+    //printf("%d\n", 'Þ');
 
     return 0;
 }
+
+
+
+//Split file into multiple c files and header files, lexicon.c
+//Check for typecasting
+//Debug file for lexicon
+
+
+//Fix can't stand, and ( '}{ ')
