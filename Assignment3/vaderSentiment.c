@@ -3,149 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
-
-#define TABLE_SIZE 5000 //Size of table 
-#define ARRAY_SIZE 10
-
-typedef struct WordData {
-
-    char *word; //Key 
-    float value1; //Mean Sentiment score
-    float value2; //Standard deviation
-    int intArray[ARRAY_SIZE]; //Arrat of sentiment rating
-    struct WordData *next; //Creates linked lists for collision entries
-
-} WordData;
-
-WordData *hashTable[TABLE_SIZE]; //Pointer to a pointer (creates table for which each entry will have the structure of the WordData) <-- Global variable
-
-//Creates a key based off the input word
-int hash(char *word) {
-    int key = 0;
-    int len = strlen(word);
-
-    for (int i = 0; i < len; i++) { 
-        key += ((unsigned char)(word[i])*i); //Ensures anagrams don't occupy the same key (avoids collisions)
-        
-    }
-    return key % TABLE_SIZE; //Normalize to table size
-}
-
-void initHashTable() {
-    //Initilaize all entries to NULL to start
-    for (int i = 0; i < TABLE_SIZE; i++) {
-        hashTable[i] = NULL;
-    }
-}
-
-//Inserts entries in hash table
-void insert (char *word, float value1, int value2, int *intArray) {
-
-    int index = hash(word); //Keys map to the index in the table
-
-    //printf("Inserting %s at %d\n", word, index);
-
-    //Initializes entry
-    WordData *entry = (WordData *)malloc(sizeof(WordData));
-    if (entry == NULL) {
-        printf("Memory allocation has failed\n");
-        exit(1);
-    }
-    entry->word = (char *)malloc((strlen(word)+1)*sizeof(char)); //Allocates memory to word dynamically note: +1 accounts for \0 terminator 
-    if (entry->word == NULL ) {
-        printf("memory allocation has failed\n");
-        free(entry);
-        exit(1);
-    }
-
-    strcpy(entry->word, word); //Copy the input word into the entry->word spot
-    entry->value1 = value1; //Assign sentiment score
-    entry->value2 = value2;
-    memcpy(entry->intArray, intArray, sizeof(intArray));
-    entry->next = NULL;
-
-    if (hashTable[index] != NULL) {
-        entry->next = hashTable[index]; //Link new entry if collision occurs
-    }
-
-    hashTable[index] = entry; //hashTable spot gets assigned to entry structure
-
-}
-
-//See if it works
-void printTable() {
-    for (int i = 0; i < TABLE_SIZE; i++) {
-        if (hashTable[i] != NULL) {
-            WordData *entry = hashTable[i];
-            while (entry != NULL) {
-                printf("\t%i\t%s\t%.1f\t%.1f\t[", i, entry->word, entry->value1, entry->value2);
-                for (int i = 0; i < ARRAY_SIZE; i++) {
-                    printf("%d ", entry->intArray[i]);
-                }
-                printf("]");
-                entry = entry->next;
-            }
-            printf("\n");
-        }
-    }
-}
-
-
-void readVader() {
-
-    char word[256]; //array to store word
-    char line[512]; //Store each line 
-    float value1 = 0; //the sentiment score
-    float value2 = 0;
-    int intArray[10];
-
-    //Opens lexicon
-    FILE *vader = fopen("vader_lexicon.txt", "r");
-
-    if (vader == NULL) {
-        printf("File cannot be opened\n");
-        exit(1);
-    }
-
-    //Scan through each line and look for the charcters in the word and the floating point integer after the tabspace as well as the standard deviation and the list values
-    while (fgets(line, sizeof(line), vader)) {
-        if (sscanf(line, "%255s %f %f [%d, %d, %d, %d, %d, %d, %d, %d, %d, %d]", 
-            word, &value1, &value2,
-            &intArray[0],&intArray[1],&intArray[2],&intArray[3],&intArray[4],
-            &intArray[5],&intArray[6],&intArray[7],&intArray[8],&intArray[9]) == 13) {//Ensures two values are received from each lne
-            printf("Inserting word: '%s' with value: %f\n", word, value1); //For debugging
-            insert (word, value1, value2, intArray);
-        }
-    }
-    //close file when done
-    fclose(vader);
-}
-
-float lookup(char *word) {
-
-    int index = hash(word); //Keys map to the index in the table
-
-    WordData *entry = hashTable[index];
-
-    //Word does not exist in lexicon
-    if (entry == NULL) {
-        return 0.0;
-    }
-
-    //If values are the same 
-    while ( entry != NULL) {
-        if (strcmp(entry->word, word) == 0) {
-            return entry->value1;
-        }
-        entry = entry->next;
-    }
-    //Word does not exist in lexicon but collision occurs 
-    return 0.0;
-
-    
-    
-}
-
+#include "lexiconUtility.h"
 
 //NOTE: This function should only be run if we already know the word is fully capitalized so we have to impliment a check for it
 //non alpha numeric character is always caps and not so add flag for this
@@ -156,7 +14,7 @@ float checkCaps(char *word) {
 
     //If it isn't all then it's not intensified
     for (int i = 0; i < len; i++) {
-        if (!isupper(word[i])) {
+        if (!isupper(word[i]) || !isalnum(word[i])) {
             amplifier = 1;
         }
         word[i] = tolower(word[i]);
@@ -170,7 +28,7 @@ float intensifiers(char *word) {
     char *positive_amplifiers[] = {"absolutely", "completely", "extremely", "really", "so", "totally", "very", "particularly", "exceptionally", "incredibly", "remarkably"};
     char *negative_amplifiers[] = {"barely", "hardly", "scarcely", "somewhat", "mildly", "slightly", "partially", "fairly", "pretty much"};
     
-    float boost_factor = 1.293;
+    float boost_factor = 0.293;
 
     //Positive string compare
     for (int i = 0; i < 11; i++) {
@@ -220,6 +78,8 @@ float sentimentCalculation(char *sentence) {
     float alpha  = 15; //normalization constant
 
     float amplifier = 1;
+    float add_to_sentiment = 0;
+    int reset_buffer = 0;
 
     float punctuation_count = 0;
     float punctuation_boost = 0.292;
@@ -234,17 +94,41 @@ float sentimentCalculation(char *sentence) {
         }  
         //Handels punctuation boost from exclimation points
         else if (sentence[i] == '!') {
-            punctuation_count++; //Is this meant to be positive for positive and negative for negative or just always positive?
+
+            if (fabs(punctuation_count) < 3) {
+                if (sentiment < 0) {
+                    punctuation_count--;
+                }
+                else {
+                    punctuation_count++; //THIS meant to be positive for positive and negative for negative
+                }
+                
+            }
         }
         else {
             if (temp_index > 0) {
                 
                 word_temp[temp_index] = '\0'; //Null-terminates the word
                 word_count++; //Increase word count
+                amplifier = intensifiers(word_temp) * negations(word_temp) * checkCaps(word_temp); //Since intensifiers are allways precurser words this should work
 
-                sentiment += amplifier * checkCaps(word_temp) * lookup(word_temp) + punctuation_count * punctuation_boost; //Add to sentiment 
-                amplifier = intensifiers(word_temp) * negations(word_temp); // Amplifer is set to the current word but won't be applied until the next word. Since amplifers don't appear in the lexicon this doesn't conflict
-                 
+                //This makes it so that precurser words are properly stored for one additional loop before being reset (i.e. without being overwritten it gets through a full loop then is reset on the second loop)
+                if (lookup(word_temp) == 0 && amplifier != 1) {
+                    add_to_sentiment = amplifier;
+                    reset_buffer = 2;
+                }
+                else if (reset_buffer > 0) {
+                    reset_buffer--;
+                    if (reset_buffer == 0) {
+                        add_to_sentiment = 0;
+                        reset_buffer = 0;
+                    } 
+                }
+              
+                sentiment += amplifier * lookup(word_temp) 
+                           + amplifier * add_to_sentiment * lookup(word_temp) 
+                           + punctuation_count * punctuation_boost; //Add to sentiment 
+
             }
             memset(word_temp, 0, sizeof(word_temp)); //Reset temporary word holder
             temp_index = 0; //Reset temporary index for word holder
@@ -255,7 +139,8 @@ float sentimentCalculation(char *sentence) {
     //Checks for last word which is missed in loop
     if (temp_index > 0) {
         word_temp[temp_index] = '\0'; //Null-terminates the word
-        sentiment += amplifier * checkCaps(word_temp) * lookup(word_temp) + punctuation_count*punctuation_boost;
+        amplifier = intensifiers(word_temp) * negations(word_temp) * checkCaps(word_temp);
+        sentiment += amplifier * lookup(word_temp) + amplifier * add_to_sentiment * lookup(word_temp) + punctuation_count * punctuation_boost; //Add to sentiment 
     }
 
     float compound = sentiment / sqrt(pow(sentiment, 2) + alpha);
@@ -265,27 +150,6 @@ float sentimentCalculation(char *sentence) {
 
 
 
-int main() {
-
-    initHashTable();
-
-    readVader();
-
-    //printTable();
-
-    char test[256] = "VADER is very smart, handsome, and funny.";
-
-    //printf("%f\n", sentimentCalculation(test));
-    //printf("%d\n", 'Þ');
-
-    return 0;
-}
-
-
-
 //Split file into multiple c files and header files, lexicon.c
 //Check for typecasting
 //Debug file for lexicon
-
-
-//Fix can't stand, and ( '}{ ')
