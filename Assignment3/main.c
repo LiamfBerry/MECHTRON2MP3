@@ -8,6 +8,8 @@ int main() {
 
     readVader();
 
+    //printTable();
+
     char test[256] = ":D :-) ;] ";
 
     printf("%f\n", sentimentCalculation(test));
