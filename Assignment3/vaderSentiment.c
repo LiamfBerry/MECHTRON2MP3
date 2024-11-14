@@ -25,7 +25,7 @@ float checkCaps(char *word) {
 
 float intensifiers(char *word) {
 
-    char *positive_amplifiers[] = {"absolutely", "completely", "extremely", "really", "so", "totally", "very", "particularly", "exceptionally", "incredibly", "remarkably"};
+    char *positive_amplifiers[] ={"absolutely", "completely", "extremely", "really", "so", "totally", "very", "particularly", "exceptionally", "incredibly", "remarkably"};
     char *negative_amplifiers[] = {"barely", "hardly", "scarcely", "somewhat", "mildly", "slightly", "partially", "fairly", "pretty much"};
     
     float boost_factor = 0.293;
@@ -79,6 +79,7 @@ float sentimentCalculation(char *sentence) {
 
     float amplifier = 1;
     float add_to_sentiment = 0;
+    float reversal = 1;
     int reset_buffer = 0;
 
     float punctuation_count = 0;
@@ -101,8 +102,7 @@ float sentimentCalculation(char *sentence) {
                 }
                 else {
                     punctuation_count++; //THIS meant to be positive for positive and negative for negative
-                }
-                
+                } 
             }
         }
         else {
@@ -110,25 +110,40 @@ float sentimentCalculation(char *sentence) {
                 
                 word_temp[temp_index] = '\0'; //Null-terminates the word
                 word_count++; //Increase word count
-                amplifier = intensifiers(word_temp) * negations(word_temp) * checkCaps(word_temp); //Since intensifiers are allways precurser words this should work
+                amplifier = intensifiers(word_temp) * checkCaps(word_temp); //Since intensifiers are allways precurser words this should work
 
                 //This makes it so that precurser words are properly stored for one additional loop before being reset (i.e. without being overwritten it gets through a full loop then is reset on the second loop)
-                if (lookup(word_temp) == 0 && amplifier != 1) {
-                    add_to_sentiment = amplifier;
-                    reset_buffer = 2;
+                if (lookup(word_temp) == 0 ) {
+                    if (amplifier != 1) {
+                        add_to_sentiment += amplifier;
+                    }
+                    else if (negations(word_temp) != 1) {
+                        reversal *= negations(word_temp);
+                    }
+                    reset_buffer = 1;
                 }
-                else if (reset_buffer > 0) {
+                else if (sentence[i] == ',' ) {
+                    ; //This statements purpose is to prevent the next one from running under this condition
+                }  
+                else if (reset_buffer > 0 && lookup(word_temp) != 0) {
                     reset_buffer--;
-                    if (reset_buffer == 0) {
-                        add_to_sentiment = 0;
-                        reset_buffer = 0;
-                    } 
                 }
+                     
               
-                sentiment += amplifier * lookup(word_temp) 
+                sentiment += amplifier * reversal * lookup(word_temp)
                            + amplifier * add_to_sentiment * lookup(word_temp) 
                            + punctuation_count * punctuation_boost; //Add to sentiment 
-
+                printf("Amplifier %f\n", amplifier);
+                printf("Add to sentiment %f\n", add_to_sentiment);
+                printf("Reversal %f\n", reversal);
+                printf("amplifier * reversal * lookup(word_temp) %f\n", amplifier * reversal * lookup(word_temp));
+                printf("Sentiment %f\n", sentiment);
+                
+                if (reset_buffer == 0) {
+                        add_to_sentiment = 0;
+                        reversal = 1;
+                        reset_buffer = 0;
+                } 
             }
             memset(word_temp, 0, sizeof(word_temp)); //Reset temporary word holder
             temp_index = 0; //Reset temporary index for word holder
@@ -140,7 +155,12 @@ float sentimentCalculation(char *sentence) {
     if (temp_index > 0) {
         word_temp[temp_index] = '\0'; //Null-terminates the word
         amplifier = intensifiers(word_temp) * negations(word_temp) * checkCaps(word_temp);
-        sentiment += amplifier * lookup(word_temp) + amplifier * add_to_sentiment * lookup(word_temp) + punctuation_count * punctuation_boost; //Add to sentiment 
+        sentiment += amplifier * reversal * lookup(word_temp) + amplifier * add_to_sentiment * lookup(word_temp) + punctuation_count * punctuation_boost; //Add to sentiment 
+        printf("Amplifier %f\n", amplifier);
+        printf("Add to sentiment %f\n", add_to_sentiment);
+        printf("Reversal %f\n", reversal);
+        printf("amplifier * reversal * lookup(word_temp) %f\n", amplifier * reversal * lookup(word_temp));
+        printf("Sentiment %f\n", sentiment);
     }
 
     float compound = sentiment / sqrt(pow(sentiment, 2) + alpha);
@@ -148,8 +168,17 @@ float sentimentCalculation(char *sentence) {
     return compound;
 }
 
-
-
-//Split file into multiple c files and header files, lexicon.c
 //Check for typecasting
-//Debug file for lexicon
+
+//uber and FRIGGIN, not needed to be included 
+//not very funny so wait until there is a word it can be applied to <-- do this 
+//^ seperate negations vs intensifiers since they are applied to the word differently  (DONE)
+
+//not smart, handsome, or funny <-- needs bridging conditions 
+
+//Do need logic for chaining
+//Do need to stack intensifiersand precursers until they are applied (DONE)
+
+//make Exclimations a function
+
+//Remeber to impliment free function

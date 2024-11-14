@@ -101,11 +101,11 @@ void printTable() {
         if (hashTable[i] != NULL) {
             WordData *entry = hashTable[i];
             while (entry != NULL) {
-                printf("\t%i\t%s\t%.1f\t%.1f\t[", i, entry->word, entry->value1, entry->value2);
+                printf("%i %s %.1f %.1f [", i, entry->word, entry->value1, entry->value2);
                 for (int i = 0; i < ARRAY_SIZE; i++) {
                     printf("%d ", entry->intArray[i]);
                 }
-                printf("]");
+                printf("]\t");
                 entry = entry->next;
             }
             printf("\n");
@@ -145,4 +145,17 @@ void readVader() {
     }
     //close file when done
     fclose(vader);
+}
+
+void freeTable() {
+    for (int i = 0; i < TABLE_SIZE; i++) {
+        WordData *entry = hashTable[i];
+        WordData *temp = entry;
+        while (temp) {
+            WordData *toFree = temp;
+            temp = temp->next;
+            free(toFree);
+        }
+        free(entry);
+    }
 }

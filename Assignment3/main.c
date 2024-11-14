@@ -10,7 +10,7 @@ int main() {
 
     //printTable();
 
-    char test[256] = ":D :-) ;] ";
+    char test[1024] = "not not funny";
 
     printf("%f\n", sentimentCalculation(test));
 
