@@ -35,7 +35,7 @@ float intensifiers(char *word) {
 
     //List of provided positive and negative amplifiers
     char *positive_amplifiers[] ={"absolutely", "completely", "extremely", "really", "so", "totally", "very", "particularly", "exceptionally", "incredibly", "remarkably"};
-    char *negative_amplifiers[] = {"barely", "hardly", "scarcely", "somewhat", "mildly", "slightly", "partially", "fairly", "pretty much"};
+    char *negative_amplifiers[] = {"barely", "hardly", "scarcely", "somewhat", "mildly", "slightly", "partially", "fairly"};
 
     //Gets lengths of arrays in case any new intensifers are to be added
     int len_positive = sizeof(positive_amplifiers)/sizeof(*positive_amplifiers);
@@ -52,7 +52,7 @@ float intensifiers(char *word) {
     //Negative string compare which is also considers capitalization just in case
     for (int i = 0; i < len_negative; i++) {
         if (strcasecmp(word, negative_amplifiers[i]) == 0) {
-            return boost_factor;
+            return -boost_factor;
         }
     }
     return 0;
@@ -134,11 +134,36 @@ void resetStoredSentiment(int *reset_buffer, float *add_to_sentiment, float *rev
 
 
 //Applies all logic and semantic nuances considered to prepare for sentiment calculation 
-void sentimentLogic(char bridge_character, char *word_temp, float *intensifier, float *is_caps, float *add_to_sentiment, int *sequential_reversal, int *reset_buffer, float *reversal) {
+void sentimentLogic(char *bridge_character, char *word_temp, float *intensifier, float *is_caps, float *add_to_sentiment, int *sequential_reversal, int *reset_buffer, float *reversal) {
 
     //Update ampifiers to current word
     *intensifier = intensifiers(word_temp); 
     *is_caps = checkCaps(word_temp);
+
+    //Check next word if it's "and"
+    char and_check[3] = {0};
+
+    //This will handle bridging for pairs (i.e. x and y)
+    for (int i = 0; i < 3; i++) {
+        if (*bridge_character == ' ') {
+            //If current chracter is a space then check for "and" one index ahead
+            and_check[i] = bridge_character[i+1];
+        }
+        else {
+            //Otherwise if its a "," or something else then check two ahead
+            and_check[i] = bridge_character[i+2];
+        }
+    }
+
+    //This statements purpose is to bridge intensifiers through bridges like "," it works by preventing the else if statement from running
+    //The "," bridge is used for bridging of three or more, "and" is for just pairs.
+    if (*bridge_character == ',' || strcasecmp(and_check, "and") == 0) {
+        *sequential_reversal = 0; //If the current character is an index or bridging word, this represents a break in the sequential reversal pattern
+    }  
+    else if (*reset_buffer > 0 && lookup(word_temp) != 0) {
+        (*reset_buffer)--; //If this statement triggers then stored sentiment is applied and reset buffer triggers reset of stored sentiment
+        *sequential_reversal = 0; //If the current word has a sentiment value it cannot be an negation so this flag updates to say negations are not sequential and it won't compound
+    }
 
     //This makes it so that precurser words are properly stored and increased with each additional precurser word until they can be applied and negated
     if (lookup(word_temp) == 0 ) {
@@ -152,16 +177,9 @@ void sentimentLogic(char bridge_character, char *word_temp, float *intensifier, 
         else {
             *sequential_reversal = 0; //If current negation is 1 then we know there isn't a sequence
         }
-        *reset_buffer = 1;
+        *reset_buffer = 1; //Reset buffer needs two iterations to cause reset to account for bridiging words like "and"
     }
-    //This statements purpose is to prevent the next one from running under this condition
-    else if (bridge_character == ',' ) {
-        *sequential_reversal = 0; //If the current character is an index, this represents a break in the sequential reversal pattern
-    }  
-    else if (*reset_buffer > 0 && lookup(word_temp) != 0) {
-        (*reset_buffer)--;
-        *sequential_reversal = 0; //If the current word has a sentiment value it cannot be an negation so this flag updates to say negations are not sequential and it won't compound
-    }
+    
 }
 
 
@@ -210,7 +228,7 @@ float sentimentCalculation(char *sentence) {
 
     //Iterate through input sentence
     for (int i = 0; i < len; i++) {
-        if (sentence[i] != ' ' && sentence[i] != '!' && sentence[i] != ',' && sentence[i] != '.' && sentence[i] != '\0')  { //How to hand punctuation that appears in emoticons?
+        if (sentence[i] != ' ' && sentence[i] != '!' && sentence[i] != ',' && sentence[i] != '.' && sentence[i] != '\0')  { 
             word_temp[temp_index] = sentence[i]; //Parse each word 
             temp_index++;
             
@@ -223,7 +241,7 @@ float sentimentCalculation(char *sentence) {
                 
                 word_temp[temp_index] = '\0'; //Null-terminates the word
                 
-                sentimentLogic(sentence[i], word_temp, &intensifier, &is_caps, &add_to_sentiment, &sequential_reversal, &reset_buffer, &reversal); //Proccess sentence logic to prepare for sentiment calculation
+                sentimentLogic(&sentence[i], word_temp, &intensifier, &is_caps, &add_to_sentiment, &sequential_reversal, &reset_buffer, &reversal); //Proccess sentence logic to prepare for sentiment calculation
                 sentimentUpdate(word_temp, &sentiment, is_caps, reversal, add_to_sentiment, punctuation_count, punctuation_boost); //Caluculate and update sentiment
                 resetStoredSentiment(&reset_buffer, &add_to_sentiment, &reversal); //Reset stored sentiment if flag is 0
 

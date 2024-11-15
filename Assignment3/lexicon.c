@@ -104,7 +104,7 @@ void readVader() {
         if (sscanf(line, "%255[^\t] %f %f [%d, %d, %d, %d, %d, %d, %d, %d, %d, %d]", 
             word, &value1, &value2,
             &intArray[0],&intArray[1],&intArray[2],&intArray[3],&intArray[4],
-            &intArray[5],&intArray[6],&intArray[7],&intArray[8],&intArray[9]) == 13) {//Ensures two values are received from each line which is 13 values
+            &intArray[5],&intArray[6],&intArray[7],&intArray[8],&intArray[9]) == 13) {//Ensures values are received from each line which is 13 values
     
             insert (word, value1, value2, intArray); //Insert found values from text file into hash table
         }
@@ -146,7 +146,7 @@ float lookup(char *word) {
 
 
 
-//See if it works and outputs as a proper table (not sure if I should remove funtion since not being used other than for testing)
+//outputs as a table with appropriate values
 void printTable() {
     for (int i = 0; i < TABLE_SIZE; i++) {
         if (hashTable[i] != NULL) {

@@ -33,13 +33,3 @@ int main() {
 
     return 0;
 }
-
-
-//Things to do still:
-/*
-Write up 
-
-Negative amplifier "pretty much" handling
-
-Maybe make vaderSentiment.c look more organized or try to optimize if possible.
-*/
