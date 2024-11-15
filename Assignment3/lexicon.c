@@ -176,7 +176,9 @@ void freeTable() {
         while (entry) {
             WordData *toFree = entry;
             entry = entry->next;
+            free(toFree->word);
             free(toFree);
+        
         }
     }
 }
