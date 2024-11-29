@@ -1,4 +1,9 @@
 // CODE: inlcude library(s)
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "utility.h"
+#include "OF_lib.h"
 
 int main(int argc, char **argv) {
 
@@ -69,7 +74,7 @@ int main(int argc, char **argv) {
 
     // Print results
     // best_fitness is the objective function value (fitness) for the final global best solution, this is the lowest fitness achieved
-    printf("Optimal fitness: %lf\n", best_fitness)
+    printf("Optimal fitness: %lf\n", best_fitness);
     printf("Optimal position: ");
     for (int i = 0; i < NUM_VARIABLES; i++) {
         printf("%lf ", best_position[i]);

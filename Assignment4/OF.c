@@ -29,7 +29,7 @@ double levy(int NUM_VARIABLES, double *x) {
         w[i] = 1.0 + (x[i] - 1.0) / 4.0;
     }
 
-    double term1 = pow(sin(w[0] * M_PI), 2);
+    double term1 = pow(sin(M_PI * w[0]), 2);
     double term2 = 0.0;
     for (int i = 0; i < NUM_VARIABLES - 1; i++) {
         term2 += pow(w[i] - 1.0, 2) * (1 + 10 * pow(sin(M_PI * w[i] + 1.0), 2));
