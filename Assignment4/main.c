@@ -4,6 +4,7 @@
 #include <string.h>
 #include "utility.h"
 #include "OF_lib.h"
+#include <time.h>
 
 int main(int argc, char **argv) {
 
@@ -21,6 +22,9 @@ int main(int argc, char **argv) {
 
     const int NUM_PARTICLES = atoi(argv[5]);  // Number of particles, e.g. 1000
     const int MAX_ITERATIONS = atoi(argv[6]); // Maximum iterations, e.g. 1000
+
+    clock_t start, end;
+    double cpu_time;
 
    // Assign the appropriate function pointer based on user input
     ObjectiveFunction objective_function = NULL;
@@ -52,6 +56,10 @@ int main(int argc, char **argv) {
     printf("Number of Variables: %d\n", NUM_VARIABLES);
     printf("Lower Bound for all variables: %lf\n", lower_bound);
     printf("Upper Bound for all variables: %lf\n", upper_bound);
+    printf("-------------------------------------\n");
+    printf("PSO initiated with:\n");
+    printf("Number of particles: %d\n", NUM_PARTICLES);
+    printf("Number of iterations: %d\n", MAX_ITERATIONS);
 
     
     // bounds[j] stores the lower and upper bound for variable j
@@ -69,11 +77,16 @@ int main(int argc, char **argv) {
     double *best_position = (double *)malloc(NUM_VARIABLES*sizeof(double));
     
     // CODE: measure the CPU time only for the following pso function
-
+    start = clock();
     double best_fitness = pso(objective_function, NUM_VARIABLES, bounds, NUM_PARTICLES, MAX_ITERATIONS, best_position);
+    end = clock();
 
+    cpu_time = ((double)(end - start))/CLOCKS_PER_SEC;
     // Print results
     // best_fitness is the objective function value (fitness) for the final global best solution, this is the lowest fitness achieved
+    printf("\nResults\n");
+    printf("-------------------------------------\n");
+    printf("CPU time: %.3lf seconds\n", cpu_time);
     printf("Optimal fitness: %lf\n", best_fitness);
     printf("Optimal position: ");
     for (int i = 0; i < NUM_VARIABLES; i++) {

@@ -4,20 +4,62 @@
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
+#include <time.h>
 
 // Helper function to generate random numbers in a range
 double random_double(double min, double max) {
     return min + (max - min) * ((double)rand() / RAND_MAX);
 }
 
+int nth_prime_approx(int dimension) {
+    if (dimension == 0) {
+        printf("Can't compute 0th dimension\n");
+        exit(1);
+    }
+    if (dimension < 6) {
+        int small_primes[] = {2,3,5,7,11};
+        return small_primes[dimension-1];
+    }
+    //Approximates nth prime number
+    return dimension * log(dimension) + dimension * log(log(dimension));
+}
+
+//Helper function to generate seemingly randomly distirubted points for more coverage of space
+double halton_sequence(double min, double max, int index, int dimension) {
+    double h = 1.0;
+    double halton_value = 0.0;
+
+    int prime = nth_prime_approx(dimension);
+
+    while (index > 0) {
+        h /= prime;
+        halton_value += h * (double)(index % prime);
+        index /= prime;
+    }
+    return min + halton_value * (max - min);
+}
+
 // CODE: implement other functions here if necessary
 
 double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bounds, int NUM_PARTICLES, int MAX_ITERATIONS, double *best_position) {
-
     // CODE: implement pso function here
 
+    //Seed for the random number generator to ensure the sequence of random numbers generated is different each time
+    srand((unsigned int)time(NULL));
+
+
+    //Inertia 
+    double w_max = 0.9, w_min = 0.4, w;
     //Initialize constants
-    double w = 0.7, c1 = 1.5, c2 = 1.5;
+    double c1_max = 1.6, c2_max = 1.6, c1_min = 1.4, c2_min = 1.4, c1, c2;
+    double v_max;
+
+    //easing function parameters
+    double sigmoid = 1;
+    double alpha = -0.002;
+
+
+    long double epsilon = 1e-6;
 
     //Allocate memory for vector rows
     double **x = calloc(NUM_PARTICLES, sizeof(double *));
@@ -27,10 +69,14 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     double *fp_best = calloc(NUM_PARTICLES, sizeof(double));
     double *g = calloc(NUM_VARIABLES, sizeof(double));
 
+    if (x == NULL || v == NULL || p == NULL || fp_best == NULL || g == NULL) {
+        printf("Memory allocation failed\n");
+        exit(1);
+    }
+
     //Initialize 
     double fg_best = INFINITY;
     
-
     //Initialization loop
     for (int i = 0; i < NUM_PARTICLES; i++) {
         
@@ -39,15 +85,19 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         v[i] = calloc(NUM_VARIABLES, sizeof(double));
         p[i] = calloc(NUM_VARIABLES, sizeof(double));
 
+        if (x[i] == NULL || v[i] == NULL || p[i] == NULL) {
+            printf("Memory allocation failed\n");
+            exit(1);
+        }
 
-        //Initialize particle positions with uniformly distributed random vector
+        //Initialize particle positions with random positions
         for (int j = 0; j < NUM_VARIABLES; j++) {
 
-            x[i][j] = random_double(bounds[j].lowerBound, bounds[j].upperBound);
+            x[i][j] = halton_sequence(bounds[j].lowerBound, bounds[j].upperBound, i * NUM_VARIABLES + j, NUM_VARIABLES);
        
             p[i][j] = x[i][j]; //Particles best known position is initial position
 
-            v[i][j] = random_double(-fabs(bounds[j].upperBound - bounds[j].lowerBound), fabs(bounds[j].upperBound - bounds[j].lowerBound)); //Small initial velocity based off difference of bounds
+            v[i][j] = random_double(-1, 1); //Small initial velocity based off difference of bounds
         }
 
         //Intialize best fitness evaluted from sets of decision variables 
@@ -65,30 +115,64 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 
     //PSO loop
     for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
+
+        //Make inertia dynamic, starts large and gets progressively smaller on an easing function
+        w = 1/pow(MAX_ITERATIONS,2) * (2/MAX_ITERATIONS * ((w_max - w_min) * pow(iter, 3)) + 3 * (w_min - w_max) * pow(iter,2)) + w_max;
+
+        //c1 (cognitive coefficient) represents how confident a particle is in its own performance
+        //c2 (social coefficient) represents how confident a particle is in its neighbours performace
+        //As the algorithim is optimized c1 should start higher while c2 should start lower and they should converge
+        //We will accomplish this with the sigmoid easing function
+        sigmoid = 1/(1+exp(alpha*(MAX_ITERATIONS - iter)));
+        c1 = 1/pow(MAX_ITERATIONS,2) * (2/MAX_ITERATIONS * ((c1_max - c1_min) * pow(iter, 3)) + 3 * (c1_min - c1_max) * pow(iter,2))*sigmoid + c1_max;
+        c2 = 1/pow(MAX_ITERATIONS,2) * (2/MAX_ITERATIONS * ((-c2_max + c2_min) * pow(iter, 3)) + 3 * (-c2_min + c2_max) * pow(iter,2))*sigmoid + c2_min;
+
         for (int i = 0; i < NUM_PARTICLES; i++) {
             for (int j = 0; j < NUM_VARIABLES; j++) {
+
+                 //Update velocity constraints based on bounds
+                v_max = 0.1 * (bounds[j].upperBound - bounds[j].lowerBound);
 
                 //Create random doubles
                 double r1 = random_double(0,1), r2 = random_double(0,1);
 
                 //Update velocity
-                v[i][j] = w * v[i][j] + c1 * r1 * (p[i][j] - x[i][j]) + c2 * r2 * (g[j] - x[i][j]);
+                
+                //If velocity stagnates then reinitialize
+                if(fabs(v[i][j]) < epsilon) {
+                    v[i][j] = random_double(-1, 1);
+                } 
+                else {
+                    v[i][j] = w * v[i][j] + c1 * r1 * (p[i][j] - x[i][j]) + c2 * r2 * (g[j] - x[i][j]);
+                }
 
                 //Update position
                 x[i][j] = x[i][j] + v[i][j];
 
-                //Clamp particle position within bounds
+                //Reflect particle position back into bounds instead of clamping
                 if (x[i][j] < bounds[j].lowerBound) {
-                    x[i][j] = bounds[j].lowerBound;
+                    x[i][j] = 2 * bounds[j].lowerBound - x[i][j];
+                    v[i][j] *= -1; //Reverse velocity to encourage more exploration
                 }
                 else if (x[i][j] > bounds[j].upperBound) {
-                    x[i][j] = bounds[j].upperBound;
+                    x[i][j] = 2 * bounds[j].upperBound - x[i][j];
+                    v[i][j] *= -1;
+                }
+
+                //Clamp velocity to prevent particles from overshooting
+                if (fabs(v[i][j]) > v_max) {
+                    if (v[i][j] >= 0) {
+                        v[i][j] = v_max;
+                    }
+                    else {
+                        v[i][j] = -v_max;
+                    } 
                 }
             }
 
             //Find fitness of new values
             double f = objective_function(NUM_VARIABLES, x[i]);
-
+      
             if (f < fp_best[i]) {
                 fp_best[i] = f;
                 for (int k = 0; k < NUM_VARIABLES; k++) {
@@ -102,6 +186,76 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
                 }
                 
             }
+        }
+        //Generalized minima found, now use nelder-mead for more precision
+        if (iter == MAX_ITERATIONS - 1) {
+
+            //eclidian distance
+
+            //Create list of local best values (n+1 nearest points of x)
+            double **l = malloc((NUM_VARIABLES + 1) * sizeof(double *));
+            if (l == NULL) {
+                printf("Memory allocation failed\n");
+                exit(1);
+            }
+            for (int i = 0; i < NUM_VARIABLES + 1; i++) {
+                l[i] = calloc(NUM_VARIABLES, sizeof(double));
+                if (l[i] == NULL) {
+                    printf("Memory allocation failed\n");
+                    exit(1);
+                }
+            }
+
+            double *distances = malloc(NUM_PARTICLES * sizeof(double));
+            if (distances == NULL) {
+                printf("Memory allocation failed\n");
+                exit(1);
+            }
+
+            for (int i = 0; i < NUM_PARTICLES; i++) {
+                distances[i] = euclidean_distance(x[i], g, NUM_VARIABLES);
+            }
+
+            for (int i = 0; i < NUM_VARIABLES + 1; i++) {
+                double min_distance = INFINITY;
+                int index = -1;
+                for (int j = 0; j < NUM_PARTICLES; j++) {
+                    if(fabs(distances[j]) < min_distance || distances[j] == 0) {
+                        min_distance = distances[j];
+                        index = j;
+                    }
+                }
+
+                //Insert minimum particle position found into local best values 
+                printf("%lf\n", distances[index]);
+                memcpy(l[i], x[index], NUM_VARIABLES * sizeof(double));
+
+                //Replace distance with inifinty so it isn't inserted again
+                distances[index] = INFINITY;
+            }
+            printf("g %lf\n",  euclidean_distance(g, g, NUM_VARIABLES));
+
+            free(distances);
+
+            //Best local value
+            
+            printf("\n[");
+            for (int i = 0; i < NUM_VARIABLES + 1; i++) {
+                printf(" %lf ", objective_function(NUM_VARIABLES, l[i]));
+            }
+            printf("]\n");
+            
+            
+            double fl_best = nelder_mead(objective_function, l, NUM_VARIABLES, MAX_ITERATIONS);
+            printf("best before nelders %lf\n", fg_best);
+            printf("best after nelders %lf\n", fl_best);
+            
+            if (fl_best < fg_best) {
+                fg_best = fl_best;
+                memcpy(g, l, NUM_VARIABLES * sizeof(double));
+            }
+
+            free (l);
         }
     }
     memcpy(best_position, g, NUM_VARIABLES * sizeof(double));
@@ -118,4 +272,217 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     free(g);
 
     return fg_best;
+}
+
+//PSO approximates area of minima and nelder mead gets more precise answer
+double nelder_mead(ObjectiveFunction objective_function, double **x_local_best, int NUM_VARIABLES, int MAX_ITERATIONS) {
+    double alpha = 1.0; //Reflection coefficient
+    double beta = 0.5; //Contraction coefficient
+    double gamma = 2.0; //Expansion coefficient
+    double sigma = 0.5; //Shrink coefficient
+
+    double *x_centroid = malloc (NUM_VARIABLES * sizeof(double));
+    double *x_best = malloc (NUM_VARIABLES * sizeof(double));
+
+    double *x_reflect = malloc(NUM_VARIABLES * sizeof(double));
+    double *x_expand = malloc(NUM_VARIABLES * sizeof(double));
+    double *x_contract_out = malloc(NUM_VARIABLES * sizeof(double));
+    double *x_contract_in = malloc(NUM_VARIABLES * sizeof(double));
+
+    //Simplex is a polytope (geometric object with flat faces in n-dimensional space) of n+1 vertices in n dimensions
+    double **simplex = malloc((NUM_VARIABLES + 1) * sizeof(double *)); 
+    //Function array that will determine best and worst points
+    double *f = calloc((NUM_VARIABLES + 1), sizeof(double));
+    if (simplex == NULL || f == NULL || x_centroid == NULL || x_best == NULL || x_reflect == NULL || x_expand == NULL || x_contract_out == NULL || x_contract_in == NULL) {
+        printf("Memory allocation failed\n");
+        exit(1);
+    }
+
+    //Initialize each verticie with point
+    for (int i = 0; i < NUM_VARIABLES + 1; i++) {
+        simplex[i] = calloc(NUM_VARIABLES, sizeof(double));
+        if (simplex[i] == NULL) {
+            printf("Memory allocation failed\n");
+            exit(1);
+        }
+        //Initialize verticies with local best point coordinates with a pointer
+        memcpy(simplex[i], x_local_best[i], NUM_VARIABLES * sizeof(double));
+
+    }
+
+    int iter = 0;
+    while (iter < MAX_ITERATIONS) {
+
+        for (int i = 0; i < NUM_VARIABLES + 1; i++) {
+            //Find objective function determinates
+            f[i] = objective_function(NUM_VARIABLES, simplex[i]);
+        }
+        //Sort objective values (and simplex values) <-- still need to do second part
+        heapSort(f, simplex, NUM_VARIABLES + 1, NUM_VARIABLES);
+
+        //Calculate centroid of all points except x n+1 i.e. worst point
+        for (int i = 0; i < NUM_VARIABLES; i++) {
+            //Initialize centroid values for each coordniate in dimension
+            x_centroid[i] = 0.0;
+            for (int j = 0; j < NUM_VARIABLES; j++) {
+                x_centroid[i] += simplex[j][i]; //Adds coresponding axis (i.e. vector addition)
+            }
+            x_centroid[i] /= (double)NUM_VARIABLES;
+        }
+
+        //simplex transformation logic
+        for (int i = 0; i < NUM_VARIABLES; i++) {
+            x_reflect[i] = x_centroid[i] + alpha * (x_centroid[i] - simplex[NUM_VARIABLES][i]);
+        }
+        double f_reflect = objective_function(NUM_VARIABLES, x_reflect);
+
+        if (f_reflect < f[NUM_VARIABLES - 1] && f[0] <= f_reflect) {
+            memcpy(simplex[NUM_VARIABLES], x_reflect, NUM_VARIABLES * sizeof(double));
+        }
+        else if (f_reflect < f[0]) {
+            for (int i = 0; i < NUM_VARIABLES; i++) {
+                x_expand[i] = x_centroid[i] + gamma * (x_reflect[i] - x_centroid[i]);
+            }
+            double f_expand = objective_function(NUM_VARIABLES, x_expand);
+
+            if (f_expand < f_reflect) {
+                memcpy(simplex[NUM_VARIABLES], x_expand, NUM_VARIABLES * sizeof(double));
+            }
+            else {
+                memcpy(simplex[NUM_VARIABLES], x_reflect, NUM_VARIABLES * sizeof(double));
+            }
+        }
+        //If triggers then we know f_reflect >= second worst point
+        else { 
+            if (f_reflect < f[NUM_VARIABLES]) {
+                for (int i = 0; i < NUM_VARIABLES; i++) {
+                    x_contract_out[i] = x_centroid[i] + beta * (x_reflect[i] - x_centroid[i]);
+                }
+                double f_contract_out = objective_function(NUM_VARIABLES, x_contract_out);
+                if (f_contract_out < f_reflect) {
+                    memcpy(simplex[NUM_VARIABLES], x_contract_out, NUM_VARIABLES * sizeof(double));
+                }
+                else {
+                    //Shrink 
+                    for (int i = 1; i <= NUM_VARIABLES; i++) {
+                        for (int j = 0; j < NUM_VARIABLES; j++) {
+                            simplex[i][j] = simplex[0][j] + sigma * (simplex[i][j] - simplex[0][j]);
+                        }
+                    }
+                }
+            }
+            else if (f_reflect >= f[NUM_VARIABLES]) {
+                for (int i = 0; i < NUM_VARIABLES; i++) {
+                    x_contract_in[i] = x_centroid[i] + beta * (simplex[NUM_VARIABLES][i] - x_centroid[i]);
+                }
+                double f_contract_in = objective_function(NUM_VARIABLES, x_contract_in);
+                if (f_contract_in < f[NUM_VARIABLES]) {
+                    memcpy(simplex[NUM_VARIABLES], x_contract_in, NUM_VARIABLES * sizeof(double));
+                }
+                else {
+                    //Shrink 
+                    for (int i = 1; i <= NUM_VARIABLES; i++) {
+                        for (int j = 0; j < NUM_VARIABLES; j++) {
+                            simplex[i][j] = simplex[0][j] + sigma * (simplex[i][j] - simplex[0][j]);
+                        }
+                    }
+                }
+            }
+            
+        }
+
+        iter++;
+    }
+    //Return best objective value
+    double f_best = f[0];
+
+    for(int i = 0; i < NUM_VARIABLES + 1; i++) {
+        free(simplex[i]);
+    }
+    free(x_centroid);
+    free(simplex);
+    free(f);
+    free(x_best);
+    free(x_reflect);
+    free(x_expand);
+    free(x_contract_out);
+    free(x_contract_in);
+    
+
+    return f_best;
+}
+
+
+//Functions taken from assignment 2 to sort objective values (specifically heap sort)
+void swap(double *x, double *y) {
+
+    //dereferences 
+    double temp = *x; //Assign temporary int to dereferenced array pointer
+    *x = *y; //Dereference pointer and change value to other dereferenced pointer
+    *y = temp; //Assign other dereferenced pointer to temporary value
+}
+
+//Swaps each verticie in the simplex which switches each coordniate for n dimensions
+void swap_simplex_rows(double *row1, double *row2, int NUM_VARIABLES) {
+    for (int i = 0; i < NUM_VARIABLES; i++) {
+        swap(&row1[i], &row2[i]);
+    }
+}
+
+void maxHeap(double *f, double **simplex, int size, int i, int NUM_VARIABLES) {
+
+    int max = i; //max is current node
+
+    //defines children of node in heap
+    int leftChild = 2*i + 1; 
+    int rightChild = 2*i + 2;
+
+    //Checks if children are greater than root then updates max
+    if (leftChild < size && f[leftChild] > f[max]) {
+        max = leftChild;
+    }
+    if (rightChild < size && f[rightChild] > f[max]) {
+        max = rightChild;
+    }
+
+    //If max is not root index make it root
+    if (max != i) {
+        swap(&f[max], &f[i]);
+        swap_simplex_rows(simplex[i], simplex[max], NUM_VARIABLES);
+
+        //Repeat for each node and its children until max heap is created
+        maxHeap(f, simplex, size, max, NUM_VARIABLES);
+    }
+}
+
+void heapSort(double *f, double **simplex, int size, int NUM_VARIABLES) {
+    //Size is number of verticies which is n + 1
+
+    //Builds max heap
+    for (int i = size/2-1; i >= 0; i--) { //i=n/2-1 ensures we start at the deepest parent layer and move upwards until we are at the root
+        maxHeap(f, simplex, size, i, NUM_VARIABLES);
+    }
+
+    //smallest element to root
+    for (int i = size-1; i > 0; i--) { //start from end and go to start 
+        swap(&f[0], &f[i]);
+        if (i != 0) {
+            swap_simplex_rows(simplex[0], simplex[i], NUM_VARIABLES);
+        }
+
+        //Reheapifies reduced (unsorted heap)
+        maxHeap(f, simplex, i, 0, NUM_VARIABLES);
+    }
+
+}
+
+//Euclidean distance finds the distance between two n-dimensional points
+//For this case we are finding the n + 1 nearest values to the global best position
+double euclidean_distance(double *x, double *g, int NUM_VARIABLES) {
+
+    double distance = 0.0;
+    for (int i = 0; i < NUM_VARIABLES; i++) {
+        distance += pow(g[i]-x[i], 2);
+    }
+    return sqrt(distance);
 }
