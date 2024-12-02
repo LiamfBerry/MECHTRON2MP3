@@ -143,7 +143,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
                     v[i][j] = random_double(-1, 1);
                 } 
                 else {
-                    v[i][j] = w * v[i][j] + c1 * r1 * (p[i][j] - x[i][j]) + c2 * r2 * (g[j] - x[i][j]);
+                    v[i][j] = w * v[i][j] + c1 * r1 * (p[i][j] - x[i][j]) + c2 * r2 * (g[j] - x[i][j]);// - w * (g[j] - p[i][j]);
                 }
 
                 //Update position
@@ -187,78 +187,81 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
                 
             }
         }
-        //Generalized minima found, now use nelder-mead for more precision
-        if (iter == MAX_ITERATIONS - 1) {
-
-            //eclidian distance
-
-            //Create list of local best values (n+1 nearest points of x)
-            double **l = malloc((NUM_VARIABLES + 1) * sizeof(double *));
-            if (l == NULL) {
-                printf("Memory allocation failed\n");
-                exit(1);
-            }
-            for (int i = 0; i < NUM_VARIABLES + 1; i++) {
-                l[i] = calloc(NUM_VARIABLES, sizeof(double));
-                if (l[i] == NULL) {
-                    printf("Memory allocation failed\n");
-                    exit(1);
-                }
-            }
-
-            double *distances = malloc(NUM_PARTICLES * sizeof(double));
-            if (distances == NULL) {
-                printf("Memory allocation failed\n");
-                exit(1);
-            }
-
-            for (int i = 0; i < NUM_PARTICLES; i++) {
-                distances[i] = euclidean_distance(x[i], g, NUM_VARIABLES);
-            }
-
-            for (int i = 0; i < NUM_VARIABLES + 1; i++) {
-                double min_distance = INFINITY;
-                int index = -1;
-                for (int j = 0; j < NUM_PARTICLES; j++) {
-                    if(fabs(distances[j]) < min_distance || distances[j] == 0) {
-                        min_distance = distances[j];
-                        index = j;
-                    }
-                }
-
-                //Insert minimum particle position found into local best values 
-                printf("%lf\n", distances[index]);
-                memcpy(l[i], x[index], NUM_VARIABLES * sizeof(double));
-
-                //Replace distance with inifinty so it isn't inserted again
-                distances[index] = INFINITY;
-            }
-            printf("g %lf\n",  euclidean_distance(g, g, NUM_VARIABLES));
-
-            free(distances);
-
-            //Best local value
-            
-            printf("\n[");
-            for (int i = 0; i < NUM_VARIABLES + 1; i++) {
-                printf(" %lf ", objective_function(NUM_VARIABLES, l[i]));
-            }
-            printf("]\n");
-            
-            
-            double fl_best = nelder_mead(objective_function, l, NUM_VARIABLES, MAX_ITERATIONS);
-            printf("best before nelders %lf\n", fg_best);
-            printf("best after nelders %lf\n", fl_best);
-            
-            if (fl_best < fg_best) {
-                fg_best = fl_best;
-                memcpy(g, l, NUM_VARIABLES * sizeof(double));
-            }
-
-            free (l);
+    }
+    //Create list of local best values (n+1 nearest points of x)
+   
+    double **simplex = malloc((NUM_VARIABLES + 1) * sizeof(double *));
+    if (simplex == NULL) {
+        printf("Memory allocation failed\n");
+        exit(1);
+    }
+    for (int i = 0; i < NUM_VARIABLES + 1; i++) {
+        simplex[i] = calloc(NUM_VARIABLES, sizeof(double));
+        if (simplex[i] == NULL) {
+            printf("Memory allocation failed\n");
+            exit(1);
         }
     }
-    memcpy(best_position, g, NUM_VARIABLES * sizeof(double));
+
+    for (int i = 0; i < NUM_VARIABLES; i++) {
+        simplex[0][i] = g[i];
+    }
+    for (int i = 1; i < NUM_VARIABLES + 1; i++) {
+        for (int j = 0; j < NUM_VARIABLES; j++) {
+            double purturb = (random_double(-NUM_VARIABLES, NUM_VARIABLES) - 0.5) * 0.2 * (bounds[j].upperBound - bounds[j].lowerBound);
+            printf("purturb %lf\n", purturb);
+            simplex[i][j] = g[j] + purturb;
+
+            //clamp 
+            if (simplex[i][j] > bounds[j].upperBound) {
+                simplex[i][j] = bounds[j].upperBound;
+            }
+            if (simplex[i][j] < bounds[j].lowerBound) {
+                simplex[i][j] = bounds[j].lowerBound;
+            }
+        }
+    }
+
+    printf("simplex before\n ");
+    for (int i = 0; i < NUM_VARIABLES; i++) {
+        printf(" %lf ", simplex[1][i]);
+    }
+    printf("simplex before\n ");
+
+    //Best local value
+    
+    printf("\n[");
+    for (int i = 0; i < NUM_VARIABLES + 1; i++) {
+        printf(" %lf ", objective_function(NUM_VARIABLES, simplex[i]));
+    }
+    printf("]\n");
+    
+    
+    double fl_best = nelder_mead(objective_function, simplex, NUM_VARIABLES, MAX_ITERATIONS, bounds);
+    printf("best before nelders %lf\n", fg_best);
+    printf("best after nelders %lf\n", fl_best);
+
+    printf("simplex after\n ");
+    for (int i = 0; i < NUM_VARIABLES; i++) {
+        printf(" %lf ", simplex[1][i]);
+    }
+    printf("simplex after\n ");
+    
+    if (fl_best < fg_best) {
+        fg_best = fl_best;
+        memcpy(best_position, simplex[0], NUM_VARIABLES * sizeof(double));
+    }
+    else {
+        memcpy(best_position, g, NUM_VARIABLES * sizeof(double));
+    }
+    
+    for(int i = 0; i < NUM_VARIABLES + 1; i++) {
+        free(simplex[i]);
+    }
+
+    free (simplex);
+
+
 
     for (int i = 0; i < NUM_PARTICLES; i++) {
         free(x[i]);
@@ -275,7 +278,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 }
 
 //PSO approximates area of minima and nelder mead gets more precise answer
-double nelder_mead(ObjectiveFunction objective_function, double **x_local_best, int NUM_VARIABLES, int MAX_ITERATIONS) {
+double nelder_mead(ObjectiveFunction objective_function, double **simplex, int NUM_VARIABLES, int MAX_ITERATIONS, Bound *bounds) {
     double alpha = 1.0; //Reflection coefficient
     double beta = 0.5; //Contraction coefficient
     double gamma = 2.0; //Expansion coefficient
@@ -286,39 +289,55 @@ double nelder_mead(ObjectiveFunction objective_function, double **x_local_best, 
 
     double *x_reflect = malloc(NUM_VARIABLES * sizeof(double));
     double *x_expand = malloc(NUM_VARIABLES * sizeof(double));
-    double *x_contract_out = malloc(NUM_VARIABLES * sizeof(double));
-    double *x_contract_in = malloc(NUM_VARIABLES * sizeof(double));
+    double *x_contract = malloc(NUM_VARIABLES * sizeof(double));
 
-    //Simplex is a polytope (geometric object with flat faces in n-dimensional space) of n+1 vertices in n dimensions
-    double **simplex = malloc((NUM_VARIABLES + 1) * sizeof(double *)); 
     //Function array that will determine best and worst points
     double *f = calloc((NUM_VARIABLES + 1), sizeof(double));
-    if (simplex == NULL || f == NULL || x_centroid == NULL || x_best == NULL || x_reflect == NULL || x_expand == NULL || x_contract_out == NULL || x_contract_in == NULL) {
+    if (f == NULL || x_centroid == NULL || x_best == NULL || x_reflect == NULL || x_expand == NULL|| x_contract == NULL) {
         printf("Memory allocation failed\n");
         exit(1);
     }
 
-    //Initialize each verticie with point
-    for (int i = 0; i < NUM_VARIABLES + 1; i++) {
-        simplex[i] = calloc(NUM_VARIABLES, sizeof(double));
-        if (simplex[i] == NULL) {
-            printf("Memory allocation failed\n");
-            exit(1);
+    
+    for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
+
+        beta = beta - 0.01*iter/MAX_ITERATIONS; //Contraction coefficient
+        gamma = gamma - iter/MAX_ITERATIONS; //Expansion coefficient
+        sigma = sigma - 0.01*iter/MAX_ITERATIONS; //Shrink coefficient
+
+         for (int i = 1; i <= NUM_VARIABLES; i++) {
+            for (int j = 0; j < NUM_VARIABLES; j++) {
+                if (simplex[i][j] > bounds[j].upperBound) {
+                    simplex[i][j] = bounds[j].upperBound;
+                }
+                if (simplex[i][j] < bounds[j].lowerBound) {
+                    simplex[i][j] = bounds[j].lowerBound;
+                }
+            }
         }
-        //Initialize verticies with local best point coordinates with a pointer
-        memcpy(simplex[i], x_local_best[i], NUM_VARIABLES * sizeof(double));
-
-    }
-
-    int iter = 0;
-    while (iter < MAX_ITERATIONS) {
 
         for (int i = 0; i < NUM_VARIABLES + 1; i++) {
             //Find objective function determinates
             f[i] = objective_function(NUM_VARIABLES, simplex[i]);
         }
+
         //Sort objective values (and simplex values) <-- still need to do second part
         heapSort(f, simplex, NUM_VARIABLES + 1, NUM_VARIABLES);
+
+        /*printf("simplex sorted\n"); 
+        for (int i =0; i<NUM_VARIABLES+1;i++) {
+            for(int j=0;j<NUM_VARIABLES;j++) {
+                printf(" %lf ", simplex[i][j]);
+            }
+            printf("\n");
+        }
+         printf("\n\n"); 
+
+        printf("value sorted\n"); 
+        for (int i =0; i<NUM_VARIABLES+1;i++) {
+            printf(" %lf ", f[i]);
+        }
+         printf("\n"); */
 
         //Calculate centroid of all points except x n+1 i.e. worst point
         for (int i = 0; i < NUM_VARIABLES; i++) {
@@ -336,77 +355,70 @@ double nelder_mead(ObjectiveFunction objective_function, double **x_local_best, 
         }
         double f_reflect = objective_function(NUM_VARIABLES, x_reflect);
 
-        if (f_reflect < f[NUM_VARIABLES - 1] && f[0] <= f_reflect) {
-            memcpy(simplex[NUM_VARIABLES], x_reflect, NUM_VARIABLES * sizeof(double));
-        }
-        else if (f_reflect < f[0]) {
+        if (f_reflect < f[0]) {
             for (int i = 0; i < NUM_VARIABLES; i++) {
                 x_expand[i] = x_centroid[i] + gamma * (x_reflect[i] - x_centroid[i]);
             }
             double f_expand = objective_function(NUM_VARIABLES, x_expand);
 
             if (f_expand < f_reflect) {
-                memcpy(simplex[NUM_VARIABLES], x_expand, NUM_VARIABLES * sizeof(double));
+                for (int i = 0; i < NUM_VARIABLES; i++) {
+                    simplex[NUM_VARIABLES][i] = x_expand[i];
+                }
             }
-            else {
-                memcpy(simplex[NUM_VARIABLES], x_reflect, NUM_VARIABLES * sizeof(double));
+           else {
+                for (int i = 0; i < NUM_VARIABLES; i++) {
+                    simplex[NUM_VARIABLES][i] = x_reflect[i];
+                }
             }
+        }
+
+        else if (f_reflect < f[NUM_VARIABLES - 1]) {
+            for (int i = 0; i < NUM_VARIABLES; i++) {
+                    simplex[NUM_VARIABLES][i] = x_reflect[i];
+                }
         }
         //If triggers then we know f_reflect >= second worst point
         else { 
+
             if (f_reflect < f[NUM_VARIABLES]) {
                 for (int i = 0; i < NUM_VARIABLES; i++) {
-                    x_contract_out[i] = x_centroid[i] + beta * (x_reflect[i] - x_centroid[i]);
-                }
-                double f_contract_out = objective_function(NUM_VARIABLES, x_contract_out);
-                if (f_contract_out < f_reflect) {
-                    memcpy(simplex[NUM_VARIABLES], x_contract_out, NUM_VARIABLES * sizeof(double));
-                }
-                else {
-                    //Shrink 
-                    for (int i = 1; i <= NUM_VARIABLES; i++) {
-                        for (int j = 0; j < NUM_VARIABLES; j++) {
-                            simplex[i][j] = simplex[0][j] + sigma * (simplex[i][j] - simplex[0][j]);
-                        }
-                    }
+                    x_contract[i] = x_centroid[i] + beta * (x_reflect[i] - x_centroid[i]);
                 }
             }
-            else if (f_reflect >= f[NUM_VARIABLES]) {
+            else {
                 for (int i = 0; i < NUM_VARIABLES; i++) {
-                    x_contract_in[i] = x_centroid[i] + beta * (simplex[NUM_VARIABLES][i] - x_centroid[i]);
+                    x_contract[i] = x_centroid[i] + beta * (simplex[NUM_VARIABLES][i] - x_centroid[i]);
                 }
-                double f_contract_in = objective_function(NUM_VARIABLES, x_contract_in);
-                if (f_contract_in < f[NUM_VARIABLES]) {
-                    memcpy(simplex[NUM_VARIABLES], x_contract_in, NUM_VARIABLES * sizeof(double));
+            }
+
+            double f_contract = objective_function(NUM_VARIABLES, x_contract);
+
+            if (f_contract < f[NUM_VARIABLES]) {
+               for (int i = 0; i < NUM_VARIABLES; i++) {
+                    simplex[NUM_VARIABLES][i] = x_contract[i];
                 }
-                else {
-                    //Shrink 
-                    for (int i = 1; i <= NUM_VARIABLES; i++) {
-                        for (int j = 0; j < NUM_VARIABLES; j++) {
-                            simplex[i][j] = simplex[0][j] + sigma * (simplex[i][j] - simplex[0][j]);
-                        }
+            }
+            else {
+                //Shrink 
+                for (int i = 1; i <= NUM_VARIABLES; i++) {
+                    for (int j = 0; j < NUM_VARIABLES; j++) {
+                        simplex[i][j] = simplex[0][j] + sigma * (simplex[i][j] - simplex[0][j]);
                     }
                 }
             }
             
         }
-
-        iter++;
     }
-    //Return best objective value
-    double f_best = f[0];
-
-    for(int i = 0; i < NUM_VARIABLES + 1; i++) {
-        free(simplex[i]);
-    }
+    double f_best = objective_function(NUM_VARIABLES, simplex[0]);
+    
+ 
     free(x_centroid);
-    free(simplex);
     free(f);
     free(x_best);
     free(x_reflect);
     free(x_expand);
-    free(x_contract_out);
-    free(x_contract_in);
+    free(x_contract);
     
 
     return f_best;
@@ -486,3 +498,7 @@ double euclidean_distance(double *x, double *g, int NUM_VARIABLES) {
     }
     return sqrt(distance);
 }
+
+
+//Nelders is same values now but we want to improve it
+//Also when nelders-mead returns as best position all x values are 0?

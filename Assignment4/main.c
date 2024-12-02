@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
     // best_fitness is the objective function value (fitness) for the final global best solution, this is the lowest fitness achieved
     printf("\nResults\n");
     printf("-------------------------------------\n");
-    printf("CPU time: %.3lf seconds\n", cpu_time);
+    printf("CPU time: %.3lf\n seconds\n", cpu_time);
     printf("Optimal fitness: %lf\n", best_fitness);
     printf("Optimal position: ");
     for (int i = 0; i < NUM_VARIABLES; i++) {
