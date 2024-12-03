@@ -41,10 +41,50 @@ double halton_sequence(double min, double max, int index, int prime) {
     return min + halton_value * (max - min);
 }
 
+//Need to add logic to handle imperfect squares -------------------------------------------------------------------------------------------------------------------------------------------------
+void von_neumann_topology(Particle *particle, int index, double *von_neumann_best, int NUM_PARTICLES, int NUM_VARIABLES) {
+    int matrix_size = sqrt(NUM_PARTICLES);
+
+    int i = index / matrix_size; //Since integers truncate to zero this provides the row index
+    int j = index % matrix_size; //The modulus of the index with the matrix size return the column as it is the remainder
+
+    double f_von_neumann_best = INFINITY;
+
+    //Define coordinates for neighbours in matrix using torus topology
+    int neighbour_indicies[4][2] = {
+        {(i - 1 + matrix_size) % matrix_size, j}, //Neighbour above
+        {(i + 1) % matrix_size, j}, //Neighbour below
+        {i , (j - 1 + matrix_size) % matrix_size}, //Neighour to the left
+        {i , (j + 1) % matrix_size} //Neighbour to the right
+    };
+
+    //Check neighbours
+    for (int k = 0; k < 4; k++) {
+        int unit_row = neighbour_indicies[k][0];
+        int unit_column = neighbour_indicies[k][1];
+
+        //Translates 2d von-neuman topology back to the 1d array of particles
+        int neighbour = unit_row * matrix_size + unit_column;
+
+        if (particle[neighbour].fp_best < f_von_neumann_best) {
+            f_von_neumann_best = particle[neighbour].fp_best;
+            memcpy(von_neumann_best, particle[neighbour].p, sizeof(double) * NUM_VARIABLES);
+        }
+    }
+
+
+}
+
 // CODE: implement other functions here if necessary
 
 double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bounds, int NUM_PARTICLES, int MAX_ITERATIONS, double *best_position) {
     // CODE: implement pso function here
+    Particle *particle = (Particle *)malloc(NUM_PARTICLES * sizeof(Particle));
+    if (particle == NULL) {
+        printf("memory allocation failed\n");
+        exit(1);
+    }
+    
     clock_t start_cpu, end_cpu;
     double serial_cpu_time;
     time_t start_time, end_time;
@@ -55,18 +95,19 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 
 
     //Inertia 
-    double w_max = 0.9, w_min = 0.4, w;
+    double w_max = 0.9, w, w_min = 0.3;
+    //0.7298
     //Initialize constants
-    double c1_max = 1.6, c2_max = 1.6, c1_min = 1.4, c2_min = 1.4, c1, c2;
+    double c1, c2, c1_max = 1.6, c2_max = 1.6, c1_min = 1.4, c2_min = 1.4;
     double v_max;
 
-    //easing function parameters
-    double sigmoid = 1;
-    double alpha = -0.002;
+    double alpha = 7; //Steepness coefficient
+    double b = 0.4; //weight of transition
+    double g_weight = 0;
 
     double epsilon = 1e-6;
     int stagnated = 0;
-    int max_stagnation = 500;
+    int max_stagnation = 1000;
 
     start_cpu = clock();
     time(&start_time);
@@ -77,7 +118,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     double *v_data = calloc(NUM_PARTICLES * NUM_VARIABLES, sizeof(double));
     double *p_data = calloc(NUM_PARTICLES * NUM_VARIABLES, sizeof(double));
 
-    double *fp_best = calloc(NUM_PARTICLES, sizeof(double));
+    
 
     //Global variables
     double *g = calloc(NUM_VARIABLES, sizeof(double));
@@ -87,7 +128,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 
     int *primes = malloc(NUM_VARIABLES * sizeof(int));
 
-    if (x_data == NULL || v_data == NULL || p_data == NULL || fp_best == NULL || g == NULL) {
+    if (x_data == NULL || v_data == NULL || p_data == NULL || g == NULL) {
         printf("Memory allocation failed\n");
         exit(1);
     }
@@ -96,30 +137,28 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     for (int i = 0; i < NUM_VARIABLES; i++) {
         primes[i] = nth_prime_approx(i + 1);
     }
-    
-    //Pointers for finding coordinates in 1d array set to the first coordinate of each particle
-    double **x = malloc(NUM_PARTICLES * sizeof(double *));
-    double **v = malloc(NUM_PARTICLES * sizeof(double *));
-    double **p = malloc(NUM_PARTICLES * sizeof(double *));
-
-    if (x == NULL || v == NULL || p == NULL) {
-        printf("Memory allocation failed\n");
-        exit(1);
-    }
 
     //Sets a pointer to the memory address of the first coordinate in each particles position velocity and best position
     //This ensures that each particles coordinates are stored properly 
     for (int i = 0; i < NUM_PARTICLES; i++) {
-        x[i] = &x_data[i * NUM_VARIABLES];
-        v[i] = &p_data[i * NUM_VARIABLES];
-        p[i] = &v_data[i * NUM_VARIABLES];
+        particle[i].x = &x_data[i * NUM_VARIABLES];
+        particle[i].v = &p_data[i * NUM_VARIABLES];
+        particle[i].p = &v_data[i * NUM_VARIABLES];
+        particle[i].fp_best = 0.0;
     }
 
     //Initialize parallelization by creating an array of local best values based on number of threads
     double fg_best_local[omp_get_max_threads()];
 
     //Same for position but 2d array for each coordinate
-    double g_local[omp_get_max_threads()][NUM_VARIABLES];
+    double **g_local = malloc(omp_get_max_threads() * sizeof(double *));
+    if (g_local == NULL) {
+        printf("Memory allocation failed\n");
+        exit(1);
+    }
+    for (int i = 0; i < omp_get_max_threads(); i++) {
+        g_local[i] = malloc(NUM_VARIABLES * sizeof(double));
+    }
     
     //Initialization loop
     #pragma omp parallel
@@ -139,27 +178,26 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
             for (int j = 0; j < NUM_VARIABLES; j++) {
 
                 //Values of pointers set to particle initial positions 
-                x[i][j] = halton_sequence(bounds[j].lowerBound, bounds[j].upperBound, i * NUM_VARIABLES + j, primes[j]);
-        
-                p[i][j] = x[i][j]; //Particles best known position is initial position
+                particle[i].x[j] = halton_sequence(bounds[j].lowerBound, bounds[j].upperBound, i * NUM_VARIABLES + j, primes[j]);
+                //random_double(bounds[j].lowerBound, bounds[j].upperBound, &seed);//
+                particle[i].p[j] = particle[i].x[j]; //Particles best known position is initial position
 
-                v[i][j] = random_double(-1, 1, &seed); //Small initial velocity based off difference of bounds
+                particle[i].v[j] = random_double(-1, 1, &seed); //Small initial velocity based off difference of bounds
             }
 
             //Intialize best fitness evaluted from sets of decision variables 
-            fp_best[i] = objective_function(NUM_VARIABLES, x[i]);
+            particle[i].fp_best = objective_function(NUM_VARIABLES, particle[i].x);
 
-            if (fp_best[i] < fg_best_local[thread_id]) {
+            if (particle[i].fp_best < fg_best_local[thread_id]) {
                 //update global best fitness for set 
-                fg_best_local[thread_id] = fp_best[i];
+                fg_best_local[thread_id] = particle[i].fp_best;
                 for (int k = 0; k < NUM_VARIABLES; k++) {
                     //Update global best positions
-                    g_local[thread_id][k] = p[i][k];
+                    g_local[thread_id][k] = particle[i].p[k];
                 }
             }           
         }    
 
-      
     }
     for ( int thread = 0; thread < omp_get_max_threads(); thread++) {
         if (fg_best_local[thread] < fg_best) {
@@ -177,17 +215,19 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     //PSO loop
     for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
 
+        //Calculate transition weight for adaptive topology using a sigmoid function
+        g_weight = 1/(1+exp(-alpha*((double)iter/MAX_ITERATIONS - b)));
+
         //Make inertia dynamic, starts large and gets progressively smaller on an easing function
         w = 1/pow(MAX_ITERATIONS,2) * (2/MAX_ITERATIONS * ((w_max - w_min) * pow(iter, 3)) + 3 * (w_min - w_max) * pow(iter,2)) + w_max;
-
+        //w_max - (w_max - w_min) * iter/MAX_ITERATIONS;//
         //c1 (cognitive coefficient) represents how confident a particle is in its own performance
         //c2 (social coefficient) represents how confident a particle is in its neighbours performace
         //As the algorithim is optimized c1 should start higher while c2 should start lower and they should converge
         //We will accomplish this with the sigmoid easing function
-        sigmoid = 1/(1+exp(alpha*(MAX_ITERATIONS - iter)));
-        c1 = 1/pow(MAX_ITERATIONS, 2) * (2 / MAX_ITERATIONS * ((c1_max - c1_min) * pow(iter, 3)) + 3 * (c1_min - c1_max) * pow(iter, 2)) * sigmoid + c1_max;
-        c2 = 1/pow(MAX_ITERATIONS, 2) * (2 / MAX_ITERATIONS * ((-c2_max + c2_min) * pow(iter, 3)) + 3 * (-c2_min + c2_max) * pow(iter, 2)) * sigmoid + c2_min;
-
+        c1 = 1/pow(MAX_ITERATIONS, 2) * (2 / MAX_ITERATIONS * ((c1_max - c1_min) * pow(iter, 3)) + 3 * (c1_min - c1_max) * pow(iter, 2)) * g_weight + c1_max;
+        c2 = 1/pow(MAX_ITERATIONS, 2) * (2 / MAX_ITERATIONS * ((-c2_max + c2_min) * pow(iter, 3)) + 3 * (-c2_min + c2_max) * pow(iter, 2)) * g_weight + c2_min;
+        //1.496;
         #pragma omp parallel
         {
             // Private/thread specific variables initialized 
@@ -198,7 +238,15 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
             #pragma omp for
             for (int i = 0; i < NUM_PARTICLES; i++) {
 
+                double von_neumann_best[NUM_VARIABLES];
+                double weighted_best[NUM_VARIABLES];
+             
+                von_neumann_topology(particle, i, von_neumann_best, NUM_PARTICLES, NUM_VARIABLES);
+
+
                 for (int j = 0; j < NUM_VARIABLES; j++) {
+
+                    weighted_best[j] = g_weight * g_local[thread_id][j] + (1 - g_weight) * von_neumann_best[j];
 
                     //Update velocity constraints based on bounds
                     v_max = 0.1 * (bounds[j].upperBound - bounds[j].lowerBound);
@@ -209,51 +257,51 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
                     //Update velocity
                     
                     //If velocity stagnates then reinitialize
-                    if(fabs(v[i][j]) < epsilon) {
-                        v[i][j] = random_double(-1, 1, &seed);
+                    if(fabs(particle[i].v[j]) < epsilon) {
+                        particle[i].v[j] = random_double(-1, 1, &seed);
                     } 
                     else {
-                        v[i][j] = w * v[i][j] + c1 * r1 * (p[i][j] - x[i][j]) + c2 * r2 * (g_local[thread_id][j] - x[i][j]);
+                        particle[i].v[j] = w * particle[i].v[j] + c1 * r1 * (particle[i].p[j] - particle[i].x[j]) + c2 * r2 * (weighted_best[j] - particle[i].x[j]);
                     }
 
                     //Update position
-                    x[i][j] = x[i][j] + v[i][j];
+                    particle[i].x[j] += particle[i].v[j];
                 
                     //Reflect particle position back into bounds instead of clamping
-                    if (x[i][j] < bounds[j].lowerBound) {
-                        x[i][j] = bounds[j].lowerBound - x[i][j] / 100;
-                        v[i][j] *= -1; //Reverse velocity to encourage more exploration
+                    if (particle[i].x[j] < bounds[j].lowerBound) {
+                        particle[i].x[j] = bounds[j].lowerBound - particle[i].x[j] / 100;
+                        particle[i].v[j] *= -1; //Reverse velocity to encourage more exploration
                     }
-                    else if (x[i][j] > bounds[j].upperBound) {
-                        x[i][j] = bounds[j].upperBound - x[i][j] / 100;
-                        v[i][j] *= -1;
+                    else if (particle[i].x[j] > bounds[j].upperBound) {
+                        particle[i].x[j] = bounds[j].upperBound - particle[i].x[j] / 100;
+                        particle[i].v[j] *= -1;
                     }
 
                     //Clamp velocity to prevent particles from overshooting
-                    if (fabs(v[i][j]) > v_max) {
-                        if (v[i][j] >= 0) {
-                            v[i][j] = v_max;
+                    if (fabs(particle[i].v[j]) > v_max) {
+                        if (particle[i].v[j] >= 0) {
+                            particle[i].v[j] = v_max;
                         }
                         else {
-                            v[i][j] = -v_max;
+                            particle[i].v[j] = -v_max;
                         } 
                     }
                 }
 
                 //Find fitness of new values
-                f = objective_function(NUM_VARIABLES, x[i]);
+                f = objective_function(NUM_VARIABLES, particle[i].x);
         
-                if (f < fp_best[i]) {
-                    fp_best[i] = f;
+                if (f < particle[i].fp_best) {
+                    particle[i].fp_best = f;
                     for (int k = 0; k < NUM_VARIABLES; k++) {
-                        p[i][k] = x[i][k];
+                        particle[i].p[k] = particle[i].x[k];
                     }
                 }
 
                 if (f < fg_best_local[thread_id]) {
                     fg_best_local[thread_id] = f;
                     for (int k = 0; k < NUM_VARIABLES; k++) {
-                        g_local[thread_id][k] = x[i][k];
+                        g_local[thread_id][k] = particle[i].x[k];
                     }
                 }
             }
@@ -270,12 +318,13 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         if(fabs(fg_best - prev_fg_best) < epsilon) {
             stagnated++;
             if (stagnated > max_stagnation) {
-                printf("Early break\n");
+                printf("Early break on iteration %d\n", iter);
+                stagnated = 0;
                 break;
             }
         }
         else {
-            printf("stagnations at change: %d\n", stagnated);
+            //printf("stagnations at change: %d\n", stagnated);
             printf("fg_best: %lf\n", fg_best);
             stagnated = 0;
         }
@@ -284,18 +333,23 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         prev_fg_best = fg_best;
         
         
+        
     }
     memcpy(best_position, g, NUM_VARIABLES * sizeof(double));
-    
+
+
+    free(particle);
     free(x_data);
     free(v_data);
     free(p_data);
-    free(fp_best);
+    
     free(g);
+    for (int i = 0; i < omp_get_max_threads(); i++) {
+        free(g_local[i]);
+    }
+    free(g_local);
+
     free(primes);
-    free(x);
-    free(v);
-    free(p);
     
     return fg_best;
 }

@@ -9,6 +9,14 @@ typedef struct Bound{
     double upperBound;
 }Bound;
 
+typedef struct Particle {
+    double *x; //position
+    double *v; //velocity
+    double *p; //best position
+    double fp_best; //personal best fitness
+
+} Particle;
+
 
 // Function prototypes
 double random_double(double min, double max, unsigned int *seed);
