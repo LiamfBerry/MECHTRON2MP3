@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
     const int NUM_PARTICLES = atoi(argv[5]);  // Number of particles, e.g. 1000
     const int MAX_ITERATIONS = atoi(argv[6]); // Maximum iterations, e.g. 1000
 
-    clock_t start, end;
+    double start, end;
     time_t start_time, end_time;
     double cpu_time, real_time;
 
@@ -80,15 +80,19 @@ int main(int argc, char **argv) {
     // CODE: measure the CPU time only for the following pso function
 
     time(&start_time);
+    start = clock();
     double best_fitness = pso(objective_function, NUM_VARIABLES, bounds, NUM_PARTICLES, MAX_ITERATIONS, best_position);
+    end = clock();
     time(&end_time);
 
     real_time = difftime(end_time, start_time);
+    cpu_time = ((double)(end - start))/CLOCKS_PER_SEC;
     // Print results
     // best_fitness is the objective function value (fitness) for the final global best solution, this is the lowest fitness achieved
     printf("\nResults\n");
     printf("-------------------------------------\n");
-    printf("Real time: %.3lf\n seconds\n", real_time);
+    printf("CPU time: %.3lf\t seconds\n", cpu_time);
+    printf("real time: %.3lf\t seconds\n", real_time);
     printf("Optimal fitness: %lf\n", best_fitness);
     printf("Optimal position: ");
     for (int i = 0; i < NUM_VARIABLES; i++) {

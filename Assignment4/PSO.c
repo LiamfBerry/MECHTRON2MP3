@@ -94,14 +94,14 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     srand((unsigned int)time(NULL));
 
 
-    //Inertia 
-    double w_max = 0.9, w, w_min = 0.3;
+    //Inertia max weights not max values
+    double w_max = 3.75, w, w_min = 0.1;
     //0.7298
     //Initialize constants
     double c1, c2, c1_max = 1.6, c2_max = 1.6, c1_min = 1.4, c2_min = 1.4;
 
     double alpha = 10; //Steepness coefficient
-    double b = 0.6; //weight of transition
+    double beta = 0.6; //weight of transition
     double g_weight = 0;
 
     double epsilon = 1e-6;
@@ -109,7 +109,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     int break_count = 0;
 
     int max_stagnation = 1000;
-    int break_threshold = 20;
+    int break_threshold = MAX_ITERATIONS/1000;
 
     start_cpu = clock();
     time(&start_time);
@@ -218,11 +218,11 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
 
         //Calculate transition weight for adaptive topology using a sigmoid function
-        g_weight = 1/(1+exp(-alpha*((double)iter/MAX_ITERATIONS - b)));
+        g_weight = 1/(1+exp(-alpha*((double)iter/MAX_ITERATIONS - beta)));
 
         //Make inertia dynamic, starts small and gets larger on a modified sigmoid function to encourage looking in starting locations more before venturing
         //During exploitation phase it gets very aggressive
-        w = w_max*2.3*w_min/(1+exp(-alpha*((double)iter/MAX_ITERATIONS - b)))+w_min;
+        w = w_max*2.3*w_min/(1+exp(-alpha*((double)iter/MAX_ITERATIONS - beta)))+w_min;
         //c1 (cognitive coefficient) represents how confident a particle is in its own performance
         //c2 (social coefficient) represents how confident a particle is in its neighbours performace
         //As the algorithim is optimized c1 should start higher while c2 should start lower and they should converge
@@ -314,12 +314,11 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
                     break;
                 }
                 stagnated = 0;
-                //break;
             }
         }
         else {
             //printf("stagnations at change: %d\n", stagnated);
-            //printf("fg_best: %lf\n", fg_best);
+            printf("fg_best: %lf\n", fg_best);
             break_count = 0;
             stagnated = 0;
         }
