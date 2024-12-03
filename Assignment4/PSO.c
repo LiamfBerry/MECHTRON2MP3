@@ -99,15 +99,17 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     //0.7298
     //Initialize constants
     double c1, c2, c1_max = 1.6, c2_max = 1.6, c1_min = 1.4, c2_min = 1.4;
-    double v_max;
 
-    double alpha = 7; //Steepness coefficient
-    double b = 0.4; //weight of transition
+    double alpha = 10; //Steepness coefficient
+    double b = 0.6; //weight of transition
     double g_weight = 0;
 
     double epsilon = 1e-6;
     int stagnated = 0;
+    int break_count = 0;
+
     int max_stagnation = 1000;
+    int break_threshold = 20;
 
     start_cpu = clock();
     time(&start_time);
@@ -218,16 +220,15 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         //Calculate transition weight for adaptive topology using a sigmoid function
         g_weight = 1/(1+exp(-alpha*((double)iter/MAX_ITERATIONS - b)));
 
-        //Make inertia dynamic, starts large and gets progressively smaller on an easing function
-        w = 1/pow(MAX_ITERATIONS,2) * (2/MAX_ITERATIONS * ((w_max - w_min) * pow(iter, 3)) + 3 * (w_min - w_max) * pow(iter,2)) + w_max;
-        //w_max - (w_max - w_min) * iter/MAX_ITERATIONS;//
+        //Make inertia dynamic, starts small and gets larger on a modified sigmoid function to encourage looking in starting locations more before venturing
+        //During exploitation phase it gets very aggressive
+        w = w_max*2.3*w_min/(1+exp(-alpha*((double)iter/MAX_ITERATIONS - b)))+w_min;
         //c1 (cognitive coefficient) represents how confident a particle is in its own performance
         //c2 (social coefficient) represents how confident a particle is in its neighbours performace
         //As the algorithim is optimized c1 should start higher while c2 should start lower and they should converge
         //We will accomplish this with the sigmoid easing function
         c1 = 1/pow(MAX_ITERATIONS, 2) * (2 / MAX_ITERATIONS * ((c1_max - c1_min) * pow(iter, 3)) + 3 * (c1_min - c1_max) * pow(iter, 2)) * g_weight + c1_max;
         c2 = 1/pow(MAX_ITERATIONS, 2) * (2 / MAX_ITERATIONS * ((-c2_max + c2_min) * pow(iter, 3)) + 3 * (-c2_min + c2_max) * pow(iter, 2)) * g_weight + c2_min;
-        //1.496;
         #pragma omp parallel
         {
             // Private/thread specific variables initialized 
@@ -247,9 +248,6 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
                 for (int j = 0; j < NUM_VARIABLES; j++) {
 
                     weighted_best[j] = g_weight * g_local[thread_id][j] + (1 - g_weight) * von_neumann_best[j];
-
-                    //Update velocity constraints based on bounds
-                    v_max = 0.1 * (bounds[j].upperBound - bounds[j].lowerBound);
 
                     //Create random doubles
                     double r1 = random_double(0, 1, &seed), r2 = random_double(0, 1, &seed);
@@ -277,15 +275,6 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
                         particle[i].v[j] *= -1;
                     }
 
-                    //Clamp velocity to prevent particles from overshooting
-                    if (fabs(particle[i].v[j]) > v_max) {
-                        if (particle[i].v[j] >= 0) {
-                            particle[i].v[j] = v_max;
-                        }
-                        else {
-                            particle[i].v[j] = -v_max;
-                        } 
-                    }
                 }
 
                 //Find fitness of new values
@@ -314,18 +303,24 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
             }
         }
 
-        //If there is no significant improvement for 10 sequential iterations then break early
+        //If there is no significant improvement for 1000 sequential iterations then create a break counter
+        //If there are 20 sequential breaks then we can conclude the function will not improve further
         if(fabs(fg_best - prev_fg_best) < epsilon) {
             stagnated++;
             if (stagnated > max_stagnation) {
-                printf("Early break on iteration %d\n", iter);
+                break_count++;
+                if (break_count > break_threshold) {
+                    printf("Early break on iteration %d\n", iter);
+                    break;
+                }
                 stagnated = 0;
-                break;
+                //break;
             }
         }
         else {
             //printf("stagnations at change: %d\n", stagnated);
-            printf("fg_best: %lf\n", fg_best);
+            //printf("fg_best: %lf\n", fg_best);
+            break_count = 0;
             stagnated = 0;
         }
 

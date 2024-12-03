@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -g -O3 -fopenmp
+CFLAGS = -Wall -Wextra -g -O3 -fopenmp 
 
 all: main
 
