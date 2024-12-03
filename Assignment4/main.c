@@ -24,7 +24,8 @@ int main(int argc, char **argv) {
     const int MAX_ITERATIONS = atoi(argv[6]); // Maximum iterations, e.g. 1000
 
     clock_t start, end;
-    double cpu_time;
+    time_t start_time, end_time;
+    double cpu_time, real_time;
 
    // Assign the appropriate function pointer based on user input
     ObjectiveFunction objective_function = NULL;
@@ -77,16 +78,17 @@ int main(int argc, char **argv) {
     double *best_position = (double *)malloc(NUM_VARIABLES*sizeof(double));
     
     // CODE: measure the CPU time only for the following pso function
-    start = clock();
-    double best_fitness = pso(objective_function, NUM_VARIABLES, bounds, NUM_PARTICLES, MAX_ITERATIONS, best_position);
-    end = clock();
 
-    cpu_time = ((double)(end - start))/CLOCKS_PER_SEC;
+    time(&start_time);
+    double best_fitness = pso(objective_function, NUM_VARIABLES, bounds, NUM_PARTICLES, MAX_ITERATIONS, best_position);
+    time(&end_time);
+
+    real_time = difftime(end_time, start_time);
     // Print results
     // best_fitness is the objective function value (fitness) for the final global best solution, this is the lowest fitness achieved
     printf("\nResults\n");
     printf("-------------------------------------\n");
-    printf("CPU time: %.3lf\n seconds\n", cpu_time);
+    printf("Real time: %.3lf\n seconds\n", real_time);
     printf("Optimal fitness: %lf\n", best_fitness);
     printf("Optimal position: ");
     for (int i = 0; i < NUM_VARIABLES; i++) {

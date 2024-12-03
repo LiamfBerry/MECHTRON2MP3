@@ -64,7 +64,9 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     double sigmoid = 1;
     double alpha = -0.002;
 
-    long double epsilon = 1e-6;
+    double epsilon = 1e-6;
+    int stagnated = 0;
+    int max_stagnation = 500;
 
     start_cpu = clock();
     time(&start_time);
@@ -81,6 +83,8 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     double *g = calloc(NUM_VARIABLES, sizeof(double));
     double fg_best = INFINITY;
 
+    double prev_fg_best = INFINITY;
+
     int *primes = malloc(NUM_VARIABLES * sizeof(int));
 
     if (x_data == NULL || v_data == NULL || p_data == NULL || fp_best == NULL || g == NULL) {
@@ -93,7 +97,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         primes[i] = nth_prime_approx(i + 1);
     }
     
-    //Pointers for finding coordinates in 1d array
+    //Pointers for finding coordinates in 1d array set to the first coordinate of each particle
     double **x = malloc(NUM_PARTICLES * sizeof(double *));
     double **v = malloc(NUM_PARTICLES * sizeof(double *));
     double **p = malloc(NUM_PARTICLES * sizeof(double *));
@@ -103,7 +107,8 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         exit(1);
     }
 
-    //Sets a pointer to the first coordinate in each particles position velocity and best position
+    //Sets a pointer to the memory address of the first coordinate in each particles position velocity and best position
+    //This ensures that each particles coordinates are stored properly 
     for (int i = 0; i < NUM_PARTICLES; i++) {
         x[i] = &x_data[i * NUM_VARIABLES];
         v[i] = &p_data[i * NUM_VARIABLES];
@@ -119,9 +124,8 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     //Initialization loop
     #pragma omp parallel
     {
-        int thread_id = omp_get_thread_num();
-
         //Local/Core specific variables
+        int thread_id = omp_get_thread_num();
         fg_best_local[thread_id] = INFINITY;
         unsigned int seed = time(NULL) + thread_id; //Different seed for each thread
 
@@ -163,7 +167,6 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
             memcpy(g, g_local[thread], NUM_VARIABLES * sizeof(double));
         }
     }
-
     end_cpu = clock();
     time(&end_time);
     serial_cpu_time = ((double)(end_cpu - start_cpu))/CLOCKS_PER_SEC;
@@ -172,7 +175,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 
 
     //PSO loop
-    /*for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
+    for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
 
         //Make inertia dynamic, starts large and gets progressively smaller on an easing function
         w = 1/pow(MAX_ITERATIONS,2) * (2/MAX_ITERATIONS * ((w_max - w_min) * pow(iter, 3)) + 3 * (w_min - w_max) * pow(iter,2)) + w_max;
@@ -182,69 +185,106 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         //As the algorithim is optimized c1 should start higher while c2 should start lower and they should converge
         //We will accomplish this with the sigmoid easing function
         sigmoid = 1/(1+exp(alpha*(MAX_ITERATIONS - iter)));
-        c1 = 1/pow(MAX_ITERATIONS,2) * (2/MAX_ITERATIONS * ((c1_max - c1_min) * pow(iter, 3)) + 3 * (c1_min - c1_max) * pow(iter,2))*sigmoid + c1_max;
-        c2 = 1/pow(MAX_ITERATIONS,2) * (2/MAX_ITERATIONS * ((-c2_max + c2_min) * pow(iter, 3)) + 3 * (-c2_min + c2_max) * pow(iter,2))*sigmoid + c2_min;
+        c1 = 1/pow(MAX_ITERATIONS, 2) * (2 / MAX_ITERATIONS * ((c1_max - c1_min) * pow(iter, 3)) + 3 * (c1_min - c1_max) * pow(iter, 2)) * sigmoid + c1_max;
+        c2 = 1/pow(MAX_ITERATIONS, 2) * (2 / MAX_ITERATIONS * ((-c2_max + c2_min) * pow(iter, 3)) + 3 * (-c2_min + c2_max) * pow(iter, 2)) * sigmoid + c2_min;
 
-        for (int i = 0; i < NUM_PARTICLES; i++) {
-            for (int j = 0; j < NUM_VARIABLES; j++) {
+        #pragma omp parallel
+        {
+            // Private/thread specific variables initialized 
+            int thread_id = omp_get_thread_num();
+            unsigned int seed = time(NULL) + thread_id; //Different seed for each thread
+            double f = INFINITY;
 
-                 //Update velocity constraints based on bounds
-                v_max = 0.1 * (bounds[j].upperBound - bounds[j].lowerBound);
+            #pragma omp for
+            for (int i = 0; i < NUM_PARTICLES; i++) {
 
-                //Create random doubles
-                double r1 = random_double(0,1), r2 = random_double(0,1);
+                for (int j = 0; j < NUM_VARIABLES; j++) {
 
-                //Update velocity
-                
-                //If velocity stagnates then reinitialize
-                if(fabs(v[i][j]) < epsilon) {
-                    v[i][j] = random_double(-1, 1);
-                } 
-                else {
-                    v[i][j] = w * v[i][j] + c1 * r1 * (p[i][j] - x[i][j]) + c2 * r2 * (g[j] - x[i][j]);// - w * (g[j] - p[i][j]);
-                }
+                    //Update velocity constraints based on bounds
+                    v_max = 0.1 * (bounds[j].upperBound - bounds[j].lowerBound);
 
-                //Update position
-                x[i][j] = x[i][j] + v[i][j];
+                    //Create random doubles
+                    double r1 = random_double(0, 1, &seed), r2 = random_double(0, 1, &seed);
 
-                //Reflect particle position back into bounds instead of clamping
-                if (x[i][j] < bounds[j].lowerBound) {
-                    x[i][j] = 2 * bounds[j].lowerBound - x[i][j];
-                    v[i][j] *= -1; //Reverse velocity to encourage more exploration
-                }
-                else if (x[i][j] > bounds[j].upperBound) {
-                    x[i][j] = 2 * bounds[j].upperBound - x[i][j];
-                    v[i][j] *= -1;
-                }
-
-                //Clamp velocity to prevent particles from overshooting
-                if (fabs(v[i][j]) > v_max) {
-                    if (v[i][j] >= 0) {
-                        v[i][j] = v_max;
-                    }
-                    else {
-                        v[i][j] = -v_max;
+                    //Update velocity
+                    
+                    //If velocity stagnates then reinitialize
+                    if(fabs(v[i][j]) < epsilon) {
+                        v[i][j] = random_double(-1, 1, &seed);
                     } 
+                    else {
+                        v[i][j] = w * v[i][j] + c1 * r1 * (p[i][j] - x[i][j]) + c2 * r2 * (g_local[thread_id][j] - x[i][j]);
+                    }
+
+                    //Update position
+                    x[i][j] = x[i][j] + v[i][j];
+                
+                    //Reflect particle position back into bounds instead of clamping
+                    if (x[i][j] < bounds[j].lowerBound) {
+                        x[i][j] = bounds[j].lowerBound - x[i][j] / 100;
+                        v[i][j] *= -1; //Reverse velocity to encourage more exploration
+                    }
+                    else if (x[i][j] > bounds[j].upperBound) {
+                        x[i][j] = bounds[j].upperBound - x[i][j] / 100;
+                        v[i][j] *= -1;
+                    }
+
+                    //Clamp velocity to prevent particles from overshooting
+                    if (fabs(v[i][j]) > v_max) {
+                        if (v[i][j] >= 0) {
+                            v[i][j] = v_max;
+                        }
+                        else {
+                            v[i][j] = -v_max;
+                        } 
+                    }
+                }
+
+                //Find fitness of new values
+                f = objective_function(NUM_VARIABLES, x[i]);
+        
+                if (f < fp_best[i]) {
+                    fp_best[i] = f;
+                    for (int k = 0; k < NUM_VARIABLES; k++) {
+                        p[i][k] = x[i][k];
+                    }
+                }
+
+                if (f < fg_best_local[thread_id]) {
+                    fg_best_local[thread_id] = f;
+                    for (int k = 0; k < NUM_VARIABLES; k++) {
+                        g_local[thread_id][k] = x[i][k];
+                    }
                 }
             }
 
-            //Find fitness of new values
-            double f = objective_function(NUM_VARIABLES, x[i]);
-      
-            if (f < fp_best[i]) {
-                fp_best[i] = f;
-                for (int k = 0; k < NUM_VARIABLES; k++) {
-                    p[i][k] = x[i][k];
-                }
-            }
-            if (f < fg_best) {
-                fg_best = f;
-                for (int k = 0; k < NUM_VARIABLES; k++) {
-                    g[k] = x[i][k];
-                }
+        }
+        for (int thread = 0; thread < omp_get_max_threads(); thread++) {
+            if (fg_best_local[thread] < fg_best) {
+                fg_best = fg_best_local[thread];
+                memcpy(g, g_local[thread], NUM_VARIABLES * sizeof(double));
             }
         }
-    }*/
+
+        //If there is no significant improvement for 10 sequential iterations then break early
+        if(fabs(fg_best - prev_fg_best) < epsilon) {
+            stagnated++;
+            if (stagnated > max_stagnation) {
+                printf("Early break\n");
+                break;
+            }
+        }
+        else {
+            printf("stagnations at change: %d\n", stagnated);
+            printf("fg_best: %lf\n", fg_best);
+            stagnated = 0;
+        }
+
+        //Set previous iteration fitness to current 
+        prev_fg_best = fg_best;
+        
+        
+    }
     memcpy(best_position, g, NUM_VARIABLES * sizeof(double));
     
     free(x_data);
@@ -259,3 +299,9 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     
     return fg_best;
 }
+
+
+
+//Implement adaptive topology that transitions from von-neuman topology to global topology
+//Maintain parallelization while doing so
+//Switch implimentation to structure format to control topology better
