@@ -95,7 +95,10 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 
 
     //Inertia max weights not max values
-    double w_max = 3.75, w, w_min = 0.1;
+    double w_max = 3.75, w_min = 0.1; 
+    
+
+    double w;
     //0.7298
     //Initialize constants
     double c1, c2, c1_max = 1.6, c2_max = 1.6, c1_min = 1.4, c2_min = 1.4;
@@ -109,7 +112,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     int break_count = 0;
 
     int max_stagnation = 1000;
-    int break_threshold = MAX_ITERATIONS/1000;
+    int break_threshold = MAX_ITERATIONS/100000;
 
     start_cpu = clock();
     time(&start_time);
@@ -125,6 +128,9 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     //Global variables
     double *g = calloc(NUM_VARIABLES, sizeof(double));
     double fg_best = INFINITY;
+
+    
+
 
     double prev_fg_best = INFINITY;
 
@@ -151,7 +157,6 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 
     //Initialize parallelization by creating an array of local best values based on number of threads
     double fg_best_local[omp_get_max_threads()];
-
     //Same for position but 2d array for each coordinate
     double **g_local = malloc(omp_get_max_threads() * sizeof(double *));
     if (g_local == NULL) {
@@ -236,7 +241,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
             unsigned int seed = time(NULL) + thread_id; //Different seed for each thread
             double f = INFINITY;
 
-            #pragma omp for
+            #pragma omp for schedule(dynamic)
             for (int i = 0; i < NUM_PARTICLES; i++) {
 
                 double von_neumann_best[NUM_VARIABLES];
@@ -353,3 +358,56 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 //Implement adaptive topology that transitions from von-neuman topology to global topology
 //Maintain parallelization while doing so
 //Switch implimentation to structure format to control topology better
+
+
+
+/*
+double best_parameters[4];
+
+//Hyper parameters
+double *w_max = malloc(1000 * sizeof(double));
+double *w_min = malloc(1000 * sizeof(double));
+double *alpha = malloc(1000 * sizeof(double));
+double *beta = malloc(1000 * sizeof(double));
+
+if (!w_max || !w_min || !alpha || !beta) {
+    printf("Memory allocation failed\n");
+    exit(1);
+}
+
+//Initialize Hypewrparameters
+for (int i = 0; i < 1000; i++) {
+    w_max[i] += i / 100; //Max value of 10
+}
+for (int i = 0; i < 1000; i++) {
+    w_min[i] += i * 0.0005; //Max value of 0.5
+}
+for (int i = 0; i < 1000; i++) {
+    alpha[i] += i / 20; //Max value of 50
+}
+for (int i = 0; i < 1000; i++) {
+    beta[i] += i / 1000; //Max value of 1
+}
+
+
+Impliment grid search for hyperparameter optimization
+
+double best_parameters_local[thread_id][4];
+
+for (int s = 0; s < 1000; s++) {
+    for (int t = 0; t < 1000; t++) {
+        for (int u = 0; < 1000; u++) {
+            for (int v = 0; v < 1000; v++) {
+
+            }
+        }
+    }
+}
+
+
+free(w_max);
+free(w_min);
+free(alpha);
+free(beta);
+
+*/
