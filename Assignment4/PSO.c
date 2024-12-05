@@ -95,7 +95,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 
 
     //Inertia max weights not max values
-    double w_max = 3.75, w_min = 0.1; 
+    double w_max = 5, w_min = 0.2; 
     
 
     double w;
@@ -112,7 +112,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     int break_count = 0;
 
     int max_stagnation = 1000;
-    int break_threshold = 100;
+    int break_threshold = 1000;
 
     start_cpu = clock();
     time(&start_time);
@@ -152,8 +152,10 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         particle[i].fp_best = 0.0;
     }
 
-    //Use half the avaialable cores so CPU isn't completely used up by process
-    int num_cores = omp_get_num_procs() / 2;
+    //Use 1/5 the avaialable cores so CPU isn't completely used up by process and communication isn't obscured between threads
+    //This was done on a 20 core CPU so if yours has say 8 Cores then you should also use 4 but if you only have 4 then you should use 2 or 3
+    //Also using more cores leads to less communication between swarms since they are subsetted so this ensures there are enough particles per thread
+    int num_cores = omp_get_num_procs() / 5;
     omp_set_num_threads(num_cores);
 
     //Initialize parallelization by creating an array of local best values based on number of threads
@@ -233,7 +235,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 
         //Make inertia dynamic, starts small and gets larger on a modified sigmoid function to encourage looking in starting locations more before venturing
         //During exploitation phase it gets very aggressive
-        w = w_max*2.3*w_min/(1+exp(-alpha*((double)iter/MAX_ITERATIONS - beta)))+w_min;
+        w = sin(w_max*2.3*w_min/(1+exp(-alpha*((double)iter/MAX_ITERATIONS - beta)))+w_min);
         //c1 (cognitive coefficient) represents how confident a particle is in its own performance
         //c2 (social coefficient) represents how confident a particle is in its neighbours performace
         //As the algorithim is optimized c1 should start higher while c2 should start lower and they should converge
@@ -247,7 +249,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
             unsigned int seed = time(NULL) + thread_id; //Different seed for each thread
             double f = INFINITY;
 
-            #pragma omp for schedule(static) reduction(min:fg_best)
+            #pragma omp for schedule(dynamic) reduction(min:fg_best)
 
             for (int i = 0; i < NUM_PARTICLES; i++) {
 
@@ -322,15 +324,15 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
             stagnated++;
             if (stagnated > max_stagnation) {
                 break_count++;
-                if (break_count > break_threshold && MAX_ITERATIONS/iter < 2) {
-                    //printf("Early break on iteration %d\n", iter);
+                if (break_count > break_threshold && iter > MAX_ITERATIONS * beta) {
+                    printf("Early break on iteration %d\n", iter);
                     break;
                 }
                 stagnated = 0;
             }
         }
         else {
-            //printf("stagnations at change: %d\n", stagnated);
+            //printf("iteration at stagnation: %d\n", iter);
             printf("fg_best: %lf\n", fg_best);
             break_count = 0;
             stagnated = 0;
@@ -338,8 +340,6 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 
         //Set previous iteration fitness to current 
         prev_fg_best = fg_best;
-        
-        
         
     }
     memcpy(best_position, g, NUM_VARIABLES * sizeof(double));

@@ -3,7 +3,7 @@ CFLAGS = -Wall -Wextra -g -O3 -fopenmp
 
 all: main
 
-main: main.o PSO.o OF.o 
+main: main.o PSO.o OF.o
 	$(CC) $(CFLAGS) -o main main.o PSO.o OF.o -lm 
 
 main.o: main.c utility.h OF_lib.h
