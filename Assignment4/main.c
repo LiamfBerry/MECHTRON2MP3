@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
 
     time(&start_time);
     start = clock();
-    double best_fitness = pso(objective_function, NUM_VARIABLES, bounds, NUM_PARTICLES, MAX_ITERATIONS, best_position);
+    double best_fitness = pso(objective_function, NUM_VARIABLES, bounds, NUM_PARTICLES, MAX_ITERATIONS, best_position, objective_function_name);
     end = clock();
     time(&end_time);
 
