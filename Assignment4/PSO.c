@@ -5,8 +5,10 @@
 #include <math.h>
 #include <string.h>
 #include <time.h>
-
+#include <primesieve.h>
 #include <omp.h>
+
+#include <stdint.h>
 
 // Helper function to generate random numbers in a range
 //Using seed and rand_r such that function is thread safe
@@ -14,22 +16,30 @@ double random_double(double min, double max, unsigned int *seed) {
     return min + (max - min) * ((double)rand_r(seed) / RAND_MAX);
 }
 
-int nth_prime_approx(int dimension) {
+uint64_t *n_primes(int dimension) {
     if (dimension == 0) {
         printf("Can't compute 0th dimension\n");
         exit(1);
     }
-    if (dimension < 6) {
-        int small_primes[] = {2,3,5,7,11};
-        return small_primes[dimension-1];
+    uint64_t n = (uint64_t)dimension;
+    uint64_t upper_bound = 1000;
+
+    while (primesieve_count_primes(0, upper_bound) < n) {
+        upper_bound *= 2;
     }
-    //Approximates nth prime number
-    return dimension * log(dimension) + dimension * log(log(dimension));
+    
+    uint64_t *primes = primesieve_generate_primes(0, upper_bound, &n, UINT64_PRIMES);
+    if (primes == NULL) {
+        printf("Allocation failed\n");
+        exit(1);
+    }
+
+    return primes;
 }
 
 //Helper function to generate seemingly randomly distirubted points for more coverage of space
 //Precomputed primes to avoid bottle necking in parallelized initialization
-double halton_sequence(double min, double max, int index, int prime) {
+double halton_sequence(double min, double max, int index, uint64_t prime, unsigned int *seed) {
     double h = 1.0;
     double halton_value = 0.0;
 
@@ -38,7 +48,22 @@ double halton_sequence(double min, double max, int index, int prime) {
         halton_value += h * (double)(index % prime);
         index /= prime;
     }
-    return min + halton_value * (max - min);
+    double position =  min + halton_value * (max - min);
+
+    //Add randomness to initilization
+    double purturbtion = (2 * (double)rand_r(seed) / RAND_MAX - 1) * 0.05;
+
+    position += purturbtion;
+
+    //Clamp if needed
+    if (position < min) {
+        position = min;
+    }
+    else if (position > max) {
+        position = max;
+    }
+
+    return position;
 }
 
 //Need to add logic to handle imperfect squares -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -131,17 +156,14 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 
     double prev_fg_best = INFINITY;
 
-    int *primes = malloc(NUM_VARIABLES * sizeof(int));
-
     if (x_data == NULL || v_data == NULL || p_data == NULL || g == NULL) {
         printf("Memory allocation failed\n");
         exit(1);
     }
 
     //Precompute n primes based on dimension
-    for (int i = 0; i < NUM_VARIABLES; i++) {
-        primes[i] = nth_prime_approx(i + 1);
-    }
+    uint64_t *primes = n_primes(NUM_VARIABLES);
+    
 
     //Sets a pointer to the memory address of the first coordinate in each particles position velocity and best position
     //This ensures that each particles coordinates are stored properly 
@@ -193,7 +215,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
             for (int j = 0; j < NUM_VARIABLES; j++) {
 
                 //Values of pointers set to particle initial positions 
-                particle[i].x[j] = halton_sequence(bounds[j].lowerBound, bounds[j].upperBound, i * NUM_VARIABLES + j, primes[j]);
+                particle[i].x[j] = halton_sequence(bounds[j].lowerBound, bounds[j].upperBound, i * NUM_VARIABLES + j, primes[j], &seed);
                 //random_double(bounds[j].lowerBound, bounds[j].upperBound, &seed);//
                 particle[i].p[j] = particle[i].x[j]; //Particles best known position is initial position
 
@@ -356,7 +378,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     }
     free(g_local);
 
-    free(primes);
+    primesieve_free(primes);
     
     return fg_best;
 }
