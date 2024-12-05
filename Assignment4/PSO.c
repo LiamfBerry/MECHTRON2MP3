@@ -51,7 +51,7 @@ double halton_sequence(double min, double max, int index, uint64_t prime, unsign
     double position =  min + halton_value * (max - min);
 
     //Add randomness to initilization
-    double purturbtion = (2 * (double)rand_r(seed) / RAND_MAX - 1) * 0.05;
+    double purturbtion = (2 * (double)rand_r(seed) / RAND_MAX - 1) * 0.01;
 
     position += purturbtion;
 
@@ -66,8 +66,9 @@ double halton_sequence(double min, double max, int index, uint64_t prime, unsign
     return position;
 }
 
-//Need to add logic to handle imperfect squares -------------------------------------------------------------------------------------------------------------------------------------------------
+
 void von_neumann_topology(Particle *particle, int index, double *von_neumann_best, int NUM_PARTICLES, int NUM_VARIABLES) {
+
     int matrix_size = ceil(sqrt(NUM_PARTICLES));
 
     int i = index / matrix_size; //Since integers truncate to zero this provides the row index
@@ -91,7 +92,7 @@ void von_neumann_topology(Particle *particle, int index, double *von_neumann_bes
         //Translates 2d von-neuman topology back to the 1d array of particles
         int neighbour = unit_row * matrix_size + unit_column;
 
-        if (particle[neighbour].fp_best < f_von_neumann_best && neighbour < NUM_PARTICLES) {
+        if (neighbour < NUM_PARTICLES && particle[neighbour].fp_best < f_von_neumann_best) {
             f_von_neumann_best = particle[neighbour].fp_best;
             memcpy(von_neumann_best, particle[neighbour].p, sizeof(double) * NUM_VARIABLES);
         }
@@ -100,29 +101,22 @@ void von_neumann_topology(Particle *particle, int index, double *von_neumann_bes
 
 }
 
-// CODE: implement other functions here if necessary
-
 double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bounds, int NUM_PARTICLES, int MAX_ITERATIONS, double *best_position, char *objective_function_name) {
 
 
     //-------------------------------------------------------------------------------------Might change termination condition later
     //Define termination condition for each case 
-    double termination_condition = 0;
+    double termination_condition = -INFINITY;
 
-     if (strcmp(objective_function_name, "griewank") == 0) {
-        termination_condition = 0.0009;
-    } else if (strcmp(objective_function_name, "levy") == 0) {
-        termination_condition = 0.0009;
-    } else if (strcmp(objective_function_name, "rastrigin") == 0) {
-        termination_condition = 0.0009;
-    } else if (strcmp(objective_function_name, "rosenbrock") == 0) {
-        termination_condition = 0.0009;
-    } else if (strcmp(objective_function_name, "schwefel") == 0) {
-       termination_condition = 0.0009;
-    } else if (strcmp(objective_function_name, "dixon_price") == 0) {
-        termination_condition = 0.0009;
+     if (strcmp(objective_function_name, "griewank") == 0
+     ||strcmp(objective_function_name, "levy") == 0
+     ||strcmp(objective_function_name, "rastrigin") == 0
+     ||strcmp(objective_function_name, "rosenbrock") == 0
+     ||strcmp(objective_function_name, "schwefel") == 0
+     ||strcmp(objective_function_name, "dixon_price") == 0) {
+        termination_condition = 0.000001;
     } else if (strcmp(objective_function_name, "styblinski_tang") == 0) {
-       termination_condition = -39.1668*NUM_VARIABLES;
+       termination_condition = -39.1665*NUM_VARIABLES;
     }
 
    
@@ -143,7 +137,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 
 
     //Initialize cognitive and social constants
-    double c1, c2, c1_max = 1.6, c2_max = 1.6, c1_min = 1.4, c2_min = 1.4;
+    double c1, c2, c1_max = 2, c2_max = 2, c1_min = 1.5, c2_min = 1.5;
 
 
     //Transition function constants for inertia and particle attractor weights based on neighbourhood influence
@@ -153,11 +147,11 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 
 
     //Stagnation and break constants
-    double epsilon = 1e-6; //Threshold for stagnation to be considered for termination conditions or velocity stagnation
+    double epsilon = 1e-6; //Threshold for stagnation to be considered for termination conditions
     int stagnated = 0;
     int break_count = 0;
-    int max_stagnation = 1000;
-    int break_threshold = 1000;
+    int max_stagnation = 1500;
+    int break_threshold = 1500;
     double prev_fg_best = INFINITY;
 
 
@@ -227,7 +221,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     for (int i = 0; i < num_cores; i++) {
         g_local[i] = malloc(NUM_VARIABLES * sizeof(double));
     }
-    printf("Number of cores used %d\n", num_cores);
+    printf("Number of cores used: %d\n", num_cores);
     
 
 
@@ -291,7 +285,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 
 
 
-    //--------------------------------------------------------------------------------PSO loop ----------------------------------------------------------------
+    //--------------------------------------------------------------------------------PSO loop using parallel computing ----------------------------------------------------------------
     for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
 
         /*
@@ -356,25 +350,21 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 
                     //Update velocity
                     
-                    //If velocity stagnates then reinitialize
-                    if(fabs(particle[i].v[j]) < epsilon) {
-                        particle[i].v[j] = random_double(-1, 1, &seed);
-                    } 
-                    else {
-                        particle[i].v[j] = w * particle[i].v[j] + c1 * r1 * (particle[i].p[j] - particle[i].x[j]) + c2 * r2 * (weighted_best[j] - particle[i].x[j]); //Same as provided velocity equation with weighted best instead of global best
-                    }
+                    //Updates particle velocity based on inertia weights, weighted best positions, and social/cognitive coefficients with some random doubles
+                    particle[i].v[j] = w * particle[i].v[j] + c1 * r1 * (particle[i].p[j] - particle[i].x[j]) + c2 * r2 * (weighted_best[j] - particle[i].x[j]); //Same as provided velocity equation with weighted best instead of global best
+                    
 
                     //Update position
                     particle[i].x[j] += particle[i].v[j];
                 
                     //Reflect particle position back into bounds instead of clamping
                     if (particle[i].x[j] < bounds[j].lowerBound) {
-                        particle[i].x[j] = bounds[j].lowerBound - particle[i].x[j] / 100;
-                        particle[i].v[j] *= -1; //Reverse velocity so particle is discouraged from reentring the boundry
+                        particle[i].x[j] = bounds[j].lowerBound + fabs(particle[i].x[j]) * 0.005;
+                        particle[i].v[j] *= -0.75; //Reverse velocity so particle is discouraged from reentring the boundry
                     }
                     else if (particle[i].x[j] > bounds[j].upperBound) {
-                        particle[i].x[j] = bounds[j].upperBound - particle[i].x[j] / 100;
-                        particle[i].v[j] *= -1;
+                        particle[i].x[j] = bounds[j].upperBound - fabs(particle[i].x[j]) * 0.005;
+                        particle[i].v[j] *= -0.75;
                     }
 
                 }
@@ -415,7 +405,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
             stagnated++;
             if (stagnated > max_stagnation) {
                 break_count++;
-                if (break_count > break_threshold && iter > MAX_ITERATIONS * beta && fg_best <= termination_condition) {
+                if ((break_count > break_threshold && iter > MAX_ITERATIONS * beta)|| fg_best <= termination_condition) {
                     printf("Early break on iteration %d\n", iter);
                     break;
                 }
@@ -423,8 +413,9 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
             }
         }
         else {
+            //Debugging purposes tells me the current value and where it stagnates which I can backtrace to the current weights of my algorithm
             //printf("iteration at stagnation: %d\n", iter);
-            printf("fg_best: %lf\n", fg_best);
+            //printf("fg_best: %lf\n", fg_best); 
             break_count = 0;
             stagnated = 0;
         }
