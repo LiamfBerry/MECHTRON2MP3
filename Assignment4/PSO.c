@@ -415,7 +415,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         else {
             //Debugging purposes tells me the current value and where it stagnates which I can backtrace to the current weights of my algorithm
             //printf("iteration at stagnation: %d\n", iter);
-            //printf("fg_best: %lf\n", fg_best); 
+            printf("fg_best: %lf\n", fg_best); 
             break_count = 0;
             stagnated = 0;
         }
