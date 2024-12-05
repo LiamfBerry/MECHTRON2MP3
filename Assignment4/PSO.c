@@ -43,7 +43,7 @@ double halton_sequence(double min, double max, int index, int prime) {
 
 //Need to add logic to handle imperfect squares -------------------------------------------------------------------------------------------------------------------------------------------------
 void von_neumann_topology(Particle *particle, int index, double *von_neumann_best, int NUM_PARTICLES, int NUM_VARIABLES) {
-    int matrix_size = sqrt(NUM_PARTICLES);
+    int matrix_size = ceil(sqrt(NUM_PARTICLES));
 
     int i = index / matrix_size; //Since integers truncate to zero this provides the row index
     int j = index % matrix_size; //The modulus of the index with the matrix size return the column as it is the remainder
@@ -66,7 +66,7 @@ void von_neumann_topology(Particle *particle, int index, double *von_neumann_bes
         //Translates 2d von-neuman topology back to the 1d array of particles
         int neighbour = unit_row * matrix_size + unit_column;
 
-        if (particle[neighbour].fp_best < f_von_neumann_best) {
+        if (particle[neighbour].fp_best < f_von_neumann_best && neighbour < NUM_PARTICLES) {
             f_von_neumann_best = particle[neighbour].fp_best;
             memcpy(von_neumann_best, particle[neighbour].p, sizeof(double) * NUM_VARIABLES);
         }
@@ -112,7 +112,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     int break_count = 0;
 
     int max_stagnation = 1000;
-    int break_threshold = MAX_ITERATIONS/100000;
+    int break_threshold = 100;
 
     start_cpu = clock();
     time(&start_time);
@@ -122,14 +122,11 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     double *x_data = calloc(NUM_PARTICLES * NUM_VARIABLES, sizeof(double));
     double *v_data = calloc(NUM_PARTICLES * NUM_VARIABLES, sizeof(double));
     double *p_data = calloc(NUM_PARTICLES * NUM_VARIABLES, sizeof(double));
-
     
 
     //Global variables
     double *g = calloc(NUM_VARIABLES, sizeof(double));
     double fg_best = INFINITY;
-
-    
 
 
     double prev_fg_best = INFINITY;
@@ -155,6 +152,10 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         particle[i].fp_best = 0.0;
     }
 
+    //Use half the avaialable cores so CPU isn't completely used up by process
+    int num_cores = omp_get_num_procs() / 2;
+    omp_set_num_threads(num_cores);
+
     //Initialize parallelization by creating an array of local best values based on number of threads
     double fg_best_local[omp_get_max_threads()];
     //Same for position but 2d array for each coordinate
@@ -163,9 +164,14 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         printf("Memory allocation failed\n");
         exit(1);
     }
-    for (int i = 0; i < omp_get_max_threads(); i++) {
+    for (int i = 0; i < num_cores; i++) {
         g_local[i] = malloc(NUM_VARIABLES * sizeof(double));
     }
+
+
+   
+
+    printf("Number of cores used %d\n", num_cores);
     
     //Initialization loop
     #pragma omp parallel
@@ -177,7 +183,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
 
         //schedule dynamic distributed work more evenly reduction ensures the best fg value is found safely between threads
         //Each thread is given 10 iterations of the loop at once
-        #pragma omp for schedule(dynamic,10) reduction(min:fg_best)
+        #pragma omp for schedule(static) reduction(min:fg_best)
 
         for (int i = 0; i < NUM_PARTICLES; i++) {
 
@@ -241,7 +247,8 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
             unsigned int seed = time(NULL) + thread_id; //Different seed for each thread
             double f = INFINITY;
 
-            #pragma omp for schedule(dynamic)
+            #pragma omp for schedule(static) reduction(min:fg_best)
+
             for (int i = 0; i < NUM_PARTICLES; i++) {
 
                 double von_neumann_best[NUM_VARIABLES];
@@ -309,13 +316,14 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         }
 
         //If there is no significant improvement for 1000 sequential iterations then create a break counter
-        //If there are 20 sequential breaks then we can conclude the function will not improve further
+        //If there are 50 sequential breaks then we can conclude the function will not improve further
+        //This can also only occur after the halfway point to allow the weight to shift to global improvment verses exploration
         if(fabs(fg_best - prev_fg_best) < epsilon) {
             stagnated++;
             if (stagnated > max_stagnation) {
                 break_count++;
-                if (break_count > break_threshold) {
-                    printf("Early break on iteration %d\n", iter);
+                if (break_count > break_threshold && MAX_ITERATIONS/iter < 2) {
+                    //printf("Early break on iteration %d\n", iter);
                     break;
                 }
                 stagnated = 0;
@@ -343,7 +351,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     free(p_data);
     
     free(g);
-    for (int i = 0; i < omp_get_max_threads(); i++) {
+    for (int i = 0; i < num_cores; i++) {
         free(g_local[i]);
     }
     free(g_local);
@@ -352,62 +360,3 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     
     return fg_best;
 }
-
-
-
-//Implement adaptive topology that transitions from von-neuman topology to global topology
-//Maintain parallelization while doing so
-//Switch implimentation to structure format to control topology better
-
-
-
-/*
-double best_parameters[4];
-
-//Hyper parameters
-double *w_max = malloc(1000 * sizeof(double));
-double *w_min = malloc(1000 * sizeof(double));
-double *alpha = malloc(1000 * sizeof(double));
-double *beta = malloc(1000 * sizeof(double));
-
-if (!w_max || !w_min || !alpha || !beta) {
-    printf("Memory allocation failed\n");
-    exit(1);
-}
-
-//Initialize Hypewrparameters
-for (int i = 0; i < 1000; i++) {
-    w_max[i] += i / 100; //Max value of 10
-}
-for (int i = 0; i < 1000; i++) {
-    w_min[i] += i * 0.0005; //Max value of 0.5
-}
-for (int i = 0; i < 1000; i++) {
-    alpha[i] += i / 20; //Max value of 50
-}
-for (int i = 0; i < 1000; i++) {
-    beta[i] += i / 1000; //Max value of 1
-}
-
-
-Impliment grid search for hyperparameter optimization
-
-double best_parameters_local[thread_id][4];
-
-for (int s = 0; s < 1000; s++) {
-    for (int t = 0; t < 1000; t++) {
-        for (int u = 0; < 1000; u++) {
-            for (int v = 0; v < 1000; v++) {
-
-            }
-        }
-    }
-}
-
-
-free(w_max);
-free(w_min);
-free(alpha);
-free(beta);
-
-*/
