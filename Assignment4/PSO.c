@@ -52,7 +52,6 @@ double halton_sequence(double min, double max, int index, uint64_t prime, unsign
 
     //Add randomness to initilization
     double purturbtion = (2 * (double)rand_r(seed) / RAND_MAX - 1) * 0.01;
-
     position += purturbtion;
 
     //Clamp if needed
@@ -352,7 +351,6 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
                     
                     //Updates particle velocity based on inertia weights, weighted best positions, and social/cognitive coefficients with some random doubles
                     particle[i].v[j] = w * particle[i].v[j] + c1 * r1 * (particle[i].p[j] - particle[i].x[j]) + c2 * r2 * (weighted_best[j] - particle[i].x[j]); //Same as provided velocity equation with weighted best instead of global best
-                    
 
                     //Update position
                     particle[i].x[j] += particle[i].v[j];
@@ -415,7 +413,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         else {
             //Debugging purposes tells me the current value and where it stagnates which I can backtrace to the current weights of my algorithm
             //printf("iteration at stagnation: %d\n", iter);
-            printf("fg_best: %lf\n", fg_best); 
+            //printf("fg_best: %lf\n", fg_best); 
             break_count = 0;
             stagnated = 0;
         }
