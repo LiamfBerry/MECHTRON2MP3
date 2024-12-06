@@ -25,6 +25,7 @@ double random_double(double min, double max, unsigned int *seed);
 uint64_t *n_primes(int dimension);
 double halton_sequence(double min, double max, int index, uint64_t prime, unsigned int *seed);
 void von_neumann_topology(Particle *particle, int index, double *von_neumann_best, int NUM_PARTICLES, int NUM_VARIABLES);
+double jump(double CJ, double alpha, double epsilon, unsigned int *seed, int NUM_VARIABLES);
 double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bounds, int NUM_PARTICLES, int MAX_ITERATIONS, double best_position[], char *objective_function_name);
 
 // CODE: declare other functions and structures if necessary

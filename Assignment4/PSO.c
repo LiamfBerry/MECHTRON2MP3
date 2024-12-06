@@ -7,7 +7,6 @@
 #include <time.h>
 #include <primesieve.h>
 #include <omp.h>
-
 #include <stdint.h>
 
 // Helper function to generate random numbers in a range
@@ -16,7 +15,10 @@ double random_double(double min, double max, unsigned int *seed) {
     return min + (max - min) * ((double)rand_r(seed) / RAND_MAX);
 }
 
+//Precomputes n-primes using primesieve library
 uint64_t *n_primes(int dimension) {
+
+    //The first prime number coresponds to the first dimension
     if (dimension == 0) {
         printf("Can't compute 0th dimension\n");
         exit(1);
@@ -24,10 +26,12 @@ uint64_t *n_primes(int dimension) {
     uint64_t n = (uint64_t)dimension;
     uint64_t upper_bound = 1000;
 
+    //Unsures that the upper bound is large enough
     while (primesieve_count_primes(0, upper_bound) < n) {
         upper_bound *= 2;
     }
     
+    //Generates a pointer to an array of n primes cooresponding to the number of varibles
     uint64_t *primes = primesieve_generate_primes(0, upper_bound, &n, UINT64_PRIMES);
     if (primes == NULL) {
         printf("Allocation failed\n");
@@ -38,8 +42,12 @@ uint64_t *n_primes(int dimension) {
 }
 
 //Helper function to generate seemingly randomly distirubted points for more coverage of space
-//Precomputed primes to avoid bottle necking in parallelized initialization
+//Precomputed primes to avoid bottle necking in parallelized initialization and for better accuracy
 double halton_sequence(double min, double max, int index, uint64_t prime, unsigned int *seed) {
+
+    //The halton sequence takes each particles row + column position as its index 
+    //and adds the modulus of that with the n'th dimensional prime number to compute its value
+    //The index is then divided by the prime number until it becomes zero
     double h = 1.0;
     double halton_value = 0.0;
 
@@ -48,6 +56,7 @@ double halton_sequence(double min, double max, int index, uint64_t prime, unsign
         halton_value += h * (double)(index % prime);
         index /= prime;
     }
+    //The position for that coordinate is the halton value normalized to be within the bounds
     double position =  min + halton_value * (max - min);
 
     //Add randomness to initilization
@@ -66,8 +75,10 @@ double halton_sequence(double min, double max, int index, uint64_t prime, unsign
 }
 
 
+//Von neumann topology puts particles into a 2D matrix then each particle can communicate with its upper lower left and right neighbour
 void von_neumann_topology(Particle *particle, int index, double *von_neumann_best, int NUM_PARTICLES, int NUM_VARIABLES) {
 
+    //Find matrix size and round up to account for non-perfect square amount of particles
     int matrix_size = ceil(sqrt(NUM_PARTICLES));
 
     int i = index / matrix_size; //Since integers truncate to zero this provides the row index
@@ -85,26 +96,27 @@ void von_neumann_topology(Particle *particle, int index, double *von_neumann_bes
 
     //Check neighbours
     for (int k = 0; k < 4; k++) {
-        int unit_row = neighbour_indicies[k][0];
-        int unit_column = neighbour_indicies[k][1];
+        int unit_row = neighbour_indicies[k][0]; //Check column position
+        int unit_column = neighbour_indicies[k][1]; //Check row position
 
-        //Translates 2d von-neuman topology back to the 1d array of particles
+        //Translates 2d von-neuman topology back to 1d array of particles to find actual neighbour
         int neighbour = unit_row * matrix_size + unit_column;
 
+        //If the neighbour is within the bounds of the particles and the position is better then update best von neuman position
         if (neighbour < NUM_PARTICLES && particle[neighbour].fp_best < f_von_neumann_best) {
             f_von_neumann_best = particle[neighbour].fp_best;
             memcpy(von_neumann_best, particle[neighbour].p, sizeof(double) * NUM_VARIABLES);
         }
     }
 
-
 }
+
 
 double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bounds, int NUM_PARTICLES, int MAX_ITERATIONS, double *best_position, char *objective_function_name) {
 
 
-    //-------------------------------------------------------------------------------------Might change termination condition later
-    //Define termination condition for each case 
+    //Define termination condition for each case saying that if the known optimal solution is found then break
+    //This is not hardcoding as this has no influence on how the optimal solution is found its just so that the function breaks if it is found
     double termination_condition = -INFINITY;
 
      if (strcmp(objective_function_name, "griewank") == 0
@@ -115,7 +127,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
      ||strcmp(objective_function_name, "dixon_price") == 0) {
         termination_condition = 0.000001;
     } else if (strcmp(objective_function_name, "styblinski_tang") == 0) {
-       termination_condition = -39.1665*NUM_VARIABLES;
+       termination_condition = -39.1660*NUM_VARIABLES;
     }
 
    
@@ -319,7 +331,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
             int thread_id = omp_get_thread_num();
             unsigned int seed = time(NULL) + thread_id; //Different seed for each thread
             double f = INFINITY;
-
+           
             //Dynamic scheduling is used here since particle calculations differ based on their respective positions so work load distribution changes after compile time
             #pragma omp for schedule(dynamic) reduction(min:fg_best)
 
@@ -331,8 +343,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
                 //Having these be local to each threa is also helpfull since each thread can just access its own cache instead of having to synchronize
                 double von_neumann_best[NUM_VARIABLES];
                 double weighted_best[NUM_VARIABLES];
-             
-
+                
                 //Find the best position between neighbouring particles
                 von_neumann_topology(particle, i, von_neumann_best, NUM_PARTICLES, NUM_VARIABLES);
 
@@ -343,7 +354,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
                     //Having this start local then become more global makes it so the particles can favour exploration then move to exploitation later
                     //We also take the average between the best local thread position and the global best position so the particles can communicate between threads as well
                     weighted_best[j] = g_weight * (g_local[thread_id][j] + g[j]) / 2 + (1 - g_weight) * von_neumann_best[j];
-
+                    
                     //Create random doubles
                     double r1 = random_double(0, 1, &seed), r2 = random_double(0, 1, &seed);
 
@@ -351,7 +362,6 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
                     
                     //Updates particle velocity based on inertia weights, weighted best positions, and social/cognitive coefficients with some random doubles
                     particle[i].v[j] = w * particle[i].v[j] + c1 * r1 * (particle[i].p[j] - particle[i].x[j]) + c2 * r2 * (weighted_best[j] - particle[i].x[j]); //Same as provided velocity equation with weighted best instead of global best
-
                     //Update position
                     particle[i].x[j] += particle[i].v[j];
                 
@@ -404,7 +414,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
             if (stagnated > max_stagnation) {
                 break_count++;
                 if ((break_count > break_threshold && iter > MAX_ITERATIONS * beta)|| fg_best <= termination_condition) {
-                    printf("Early break on iteration %d\n", iter);
+                    printf("Early break on iteration: %d\n", iter);
                     break;
                 }
                 stagnated = 0;
@@ -413,7 +423,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         else {
             //Debugging purposes tells me the current value and where it stagnates which I can backtrace to the current weights of my algorithm
             //printf("iteration at stagnation: %d\n", iter);
-            //printf("fg_best: %lf\n", fg_best); 
+            printf("fg_best: %lf\n", fg_best); 
             break_count = 0;
             stagnated = 0;
         }
@@ -422,6 +432,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         prev_fg_best = fg_best;
         
     }
+    //Copy global best to best position to be printed by main
     memcpy(best_position, g, NUM_VARIABLES * sizeof(double));
 
     //Free allocated memory

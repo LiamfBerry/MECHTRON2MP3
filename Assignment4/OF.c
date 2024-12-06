@@ -1,7 +1,4 @@
 #include <math.h>
-
-#define _USE_MATH_DEFINES
-
 // IMPORTANT: DO NOT change this file
 // Objective functions:
 
