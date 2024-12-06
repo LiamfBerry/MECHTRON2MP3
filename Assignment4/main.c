@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
     cpu_time = ((double)(end - start))/CLOCKS_PER_SEC;
     // Print results
     // best_fitness is the objective function value (fitness) for the final global best solution, this is the lowest fitness achieved
-    printf("\nResults using %s in %d dimensions\n", objective_function_name, NUM_VARIABLES);
+    printf("\nResults using %s in %d dimensions \n", objective_function_name, NUM_VARIABLES);
     printf("-------------------------------------\n");
     printf("CPU time: %.3lf\t seconds\n", cpu_time);
     printf("real time: %.3lf\t seconds\n", real_time);
