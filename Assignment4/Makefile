@@ -17,3 +17,4 @@ OF.o: OF.c OF_lib.h
 
 clean:
 	rm -f main *.o
+	
