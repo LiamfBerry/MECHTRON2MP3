@@ -217,7 +217,20 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     //Use 1/5 the avaialable cores so CPU isn't completely used up by process and communication isn't obscured between threads
     //This was done on a 20 core CPU so if yours has say 8 Cores then you should also use 4 but if you only have 4 then you should use 2 or 3
     //Also using more cores leads to less communication between swarms since they are subsetted so this ensures there are enough particles per thread
-    int num_cores = omp_get_num_procs() / 5;
+    int num_cores;
+    if (omp_get_num_procs() >= 6) {
+        num_cores = 4; //If you have enough cores, 4 has seen the most optimial performance, any more and computation is faster but accurcy decreaces
+    }
+    else if (omp_get_num_procs() < 6) {
+        num_cores = 3; //This ensures that you aren't using your entire CPU to compute this
+    }
+    else if (omp_get_num_procs() == 4) {
+        num_cores = 2;
+    }
+    else {
+        num_cores = 1; //if you have an older CPU that cannot support multithreading 
+    }
+
     omp_set_num_threads(num_cores);
 
     //Initialize parallelization by creating an array of local best values based on number of threads which is also just the num_cores value
@@ -423,7 +436,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
         else {
             //Debugging purposes tells me the current value and where it stagnates which I can backtrace to the current weights of my algorithm
             //printf("iteration at stagnation: %d\n", iter);
-            printf("fg_best: %lf\n", fg_best); 
+            //printf("fg_best: %lf\n", fg_best); 
             break_count = 0;
             stagnated = 0;
         }
