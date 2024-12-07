@@ -114,22 +114,6 @@ void von_neumann_topology(Particle *particle, int index, double *von_neumann_bes
 
 double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bounds, int NUM_PARTICLES, int MAX_ITERATIONS, double *best_position, char *objective_function_name) {
 
-
-    //Define termination condition for each case saying that if the known optimal solution is found then break
-    //This is not hardcoding as this has no influence on how the optimal solution is found its just so that the function breaks if it is found
-    double termination_condition = -INFINITY;
-
-     if (strcmp(objective_function_name, "griewank") == 0
-     ||strcmp(objective_function_name, "levy") == 0
-     ||strcmp(objective_function_name, "rastrigin") == 0
-     ||strcmp(objective_function_name, "rosenbrock") == 0
-     ||strcmp(objective_function_name, "schwefel") == 0
-     ||strcmp(objective_function_name, "dixon_price") == 0) {
-        termination_condition = 0.000001;
-    } else if (strcmp(objective_function_name, "styblinski_tang") == 0) {
-       termination_condition = -39.1660*NUM_VARIABLES;
-    }
-
    
     //Seed for the random number generator to ensure the sequence of random numbers generated is different each time
     srand((unsigned int)time(NULL));
@@ -137,9 +121,7 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     
     //Timing variables for initilize time calculation
     clock_t start_cpu, end_cpu;
-    double serial_cpu_time;
-    time_t start_time, end_time;
-    double parallel_cpu_time;
+    double cpu_time;
 
     
     //Inertia max and min weights (not max and min values)
@@ -161,14 +143,28 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     double epsilon = 1e-6; //Threshold for stagnation to be considered for termination conditions
     int stagnated = 0;
     int break_count = 0;
-    int max_stagnation = 1500;
-    int break_threshold = 1500;
+    int max_stagnation = 1500; //Stagnation count to consider a break count
+    int break_threshold = 1500; //Break counts to terminate
     double prev_fg_best = INFINITY;
 
+    //Define termination conditions for each case saying that if the known optimal solution is found then break
+    //This is not hardcoding as this has no influence on how the optimal solution is found its just so that the function breaks if it is found
+    //If a novel test case is provided then this will simply have no influence on the other break conditions that exist
+    double termination_condition = -INFINITY;
+
+     if (strcmp(objective_function_name, "griewank") == 0
+     ||strcmp(objective_function_name, "levy") == 0
+     ||strcmp(objective_function_name, "rastrigin") == 0
+     ||strcmp(objective_function_name, "rosenbrock") == 0
+     ||strcmp(objective_function_name, "schwefel") == 0
+     ||strcmp(objective_function_name, "dixon_price") == 0) {
+        termination_condition = 0.000001;
+    } else if (strcmp(objective_function_name, "styblinski_tang") == 0) {
+       termination_condition = -39.1660*NUM_VARIABLES;
+    }
 
     //Start recording init time once memory begins to be allocated 
     start_cpu = clock();
-    time(&start_time);
 
 
     //Particle array for each particle structure
@@ -302,10 +298,8 @@ double pso(ObjectiveFunction objective_function, int NUM_VARIABLES, Bound *bound
     //Initlization is done now se we see how long it took in CPU time verses real time. 
     //Since we are using parallel computing the CPU time is actually higher than if we accomplished this serially but the actual time is much faster
     end_cpu = clock();
-    time(&end_time);
-    serial_cpu_time = ((double)(end_cpu - start_cpu))/CLOCKS_PER_SEC;
-    parallel_cpu_time = difftime(end_time, start_time);
-    printf("Initialized in %lf seconds serially and %lf seconds in real time from parallelization\n", serial_cpu_time, parallel_cpu_time);
+    cpu_time = ((double)(end_cpu - start_cpu))/CLOCKS_PER_SEC;
+    printf("Initialized in %lf seconds \n", cpu_time);
 
 
 
